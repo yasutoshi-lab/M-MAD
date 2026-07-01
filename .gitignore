@@ -1,0 +1,20 @@
+## Other
+
+.claude/*
+.venv/*
+.env
+.vscode/
+
+## Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+## Generated outputs (Stage1 / Stage2&3)
+data/output_*/
+stage2_3_*/
+
+## Agents Files
+
+CLAUDE.md
+AGENTS.md
