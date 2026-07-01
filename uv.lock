@@ -440,13 +440,30 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/dd/c1/d10b371bcba7abce05e2b33910e39c33cfa496a53f13640b7b8e10bb4d2b/langcodes-3.5.1-py3-none-any.whl", hash = "sha256:b6a9c25c603804e2d169165091d0cdb23934610524a21d226e4f463e8e958a72", size = 183050, upload-time = "2025-12-02T16:21:59.954Z" },
 ]
 
+[package.optional-dependencies]
+data = [
+    { name = "language-data" },
+]
+
+[[package]]
+name = "language-data"
+version = "1.4.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "marisa-trie" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/61/50/2518b4d0805f4d1f10166837829ad0bd71dcee3ec33fa84aa8c0db23c13c/language_data-1.4.0.tar.gz", hash = "sha256:800e6457e7beda781c156e02d7707e38db2ded026472e07e2c055dc8446ee574", size = 5309660, upload-time = "2025-11-28T13:45:25.217Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ad/d1/68e2bcca94c9bbdc122a71e504e0b6a6c3e31541b1bad33fee0205996006/language_data-1.4.0-py3-none-any.whl", hash = "sha256:f741927c24ab14cbed2a57bc2bfe82b00cff266c427179597e8b14123364f084", size = 5572678, upload-time = "2025-11-28T13:45:23.381Z" },
+]
+
 [[package]]
 name = "m-mad"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "backoff" },
-    { name = "langcodes" },
+    { name = "langcodes", extra = ["data"] },
     { name = "openai" },
     { name = "tiktoken" },
     { name = "tqdm" },
@@ -461,7 +478,7 @@ eval = [
 [package.metadata]
 requires-dist = [
     { name = "backoff" },
-    { name = "langcodes" },
+    { name = "langcodes", extras = ["data"] },
     { name = "openai", specifier = "==0.28.1" },
     { name = "tiktoken" },
     { name = "tqdm", specifier = "==4.66.1" },
@@ -471,6 +488,23 @@ requires-dist = [
 eval = [
     { name = "mt-metrics-eval", git = "https://github.com/google-research/mt-metrics-eval" },
     { name = "numpy" },
+]
+
+[[package]]
+name = "marisa-trie"
+version = "1.4.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/77/5d/e235921b5b74818cb65b557fa05cc6201c2c1612d4866ff75c835bcf808d/marisa_trie-1.4.1.tar.gz", hash = "sha256:44ce3bdbeb7c950d463e460184fc3e18702df9ef0edb826bac672fd789fb1d20", size = 261581, upload-time = "2026-04-08T07:17:52.991Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ed/56/ec51c02b083ccd25ce3f1cf13b9c575c05497d18f9386ac51314bc62fea8/marisa_trie-1.4.1-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:bc306a82f0dbece8f790bd4cfa0d7ad2dad1db9fb911395b07e7ae9862501bd2", size = 209920, upload-time = "2026-04-08T07:16:12.757Z" },
+    { url = "https://files.pythonhosted.org/packages/87/96/3fc7b2e94c1da93636582acc7d56eb186c4d2cb2c01b0b2c2a177ca11061/marisa_trie-1.4.1-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:def32aa8edaec6d4229922dacb87e9d70d6bfb8ea994a13c9fcbfbee86e0b281", size = 193667, upload-time = "2026-04-08T07:16:14.111Z" },
+    { url = "https://files.pythonhosted.org/packages/43/df/309e88b3c2bbf2abdc9f62a4ebc313b24130edddecca2889db9dbd74c765/marisa_trie-1.4.1-cp310-cp310-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:89de7c0e6afd395b773b5adeb8ab1f315186b6538a34bbfaf73b049e3b555c2a", size = 1457943, upload-time = "2026-04-08T07:16:15.587Z" },
+    { url = "https://files.pythonhosted.org/packages/c1/e9/1197d04f35791607d01c010ae0de55ca53de574f21774625af0da3b573f8/marisa_trie-1.4.1-cp310-cp310-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:ecd2f16e19f441efc6755cd09703126ee27a496b9c50f179877c00975c150189", size = 1480962, upload-time = "2026-04-08T07:16:17.342Z" },
+    { url = "https://files.pythonhosted.org/packages/e8/ea/ff378bf751f053cb4dd6082cc6bcffef62af765aa39f974250323586015a/marisa_trie-1.4.1-cp310-cp310-musllinux_1_2_aarch64.whl", hash = "sha256:ef8f430292df0faa6a639bbba64a5e2ac09dfb967e8752d51f0bf9dd11f16b96", size = 2387724, upload-time = "2026-04-08T07:16:19.079Z" },
+    { url = "https://files.pythonhosted.org/packages/c3/cc/726372806ddd3dd4f7458b15ca890eb52f4a33e86260cff868ddc4a0f797/marisa_trie-1.4.1-cp310-cp310-musllinux_1_2_x86_64.whl", hash = "sha256:c0ff2ea31a3f2ee5fcabcc77db8e5f5967d8e5614daa537262fe7617941fa262", size = 2489031, upload-time = "2026-04-08T07:16:20.754Z" },
+    { url = "https://files.pythonhosted.org/packages/12/4c/64698d167825e53f1cd375db6d9357a87ecec1a00d12f6f3651f8a858457/marisa_trie-1.4.1-cp310-cp310-win32.whl", hash = "sha256:b8315d2ec3fd52a7c439d8cf3b4fe5ea67dc46c1fd66d7bc814d2c699e831e18", size = 141020, upload-time = "2026-04-08T07:16:22.156Z" },
+    { url = "https://files.pythonhosted.org/packages/fa/81/bdd4ce80ab15bc422377f123ac6c49b91396a71623cac7bc8198f1c4e016/marisa_trie-1.4.1-cp310-cp310-win_amd64.whl", hash = "sha256:1bbdad06145ee68dd8c9280318339a401d671844420add7c48eeeddd1cc61fa8", size = 174452, upload-time = "2026-04-08T07:16:23.438Z" },
+    { url = "https://files.pythonhosted.org/packages/1e/87/c65aeaeed6d8563a7522215bdc9d676a6978f8bb27071d7b59a5337a2ff9/marisa_trie-1.4.1-cp310-cp310-win_arm64.whl", hash = "sha256:b10988ddeb8a37fd85ab03c043c5dd6fcc8f63d54af770bc27cb9722292b2a8c", size = 142249, upload-time = "2026-04-08T07:16:24.578Z" },
 ]
 
 [[package]]

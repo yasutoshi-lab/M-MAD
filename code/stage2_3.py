@@ -5,6 +5,7 @@ import openai
 import sys
 import os
 import re
+from langcodes import Language
 
 system = sys.argv[1]
 lp = sys.argv[2]
@@ -124,8 +125,10 @@ user_prompt = """
 judge_prompt = "Compare the error annotations provided by two agents for the same machine-translated segment. Determine if the annotations are essentially consistent. The first agent annotations are: {first_annotations}; the other agent annotations are: {second_annotations}. Return \"yes\" if they are consistent, or \"no\" if they are inconsistent. Provide no additional output."
 
 
-source_lang = "Chinese"
-target_lang = "English"
+# 言語ペア（CLI 引数 lp）から言語名を導出する。stage1.py と同じ方式に統一。
+src_code, tgt_code = lp.split("-")
+source_lang = Language.make(language=src_code).display_name()
+target_lang = Language.make(language=tgt_code).display_name()
 
 
 if __name__ == "__main__":
