@@ -321,7 +321,7 @@ def parse_args():
     parser.add_argument("-i", "--input-file", type=str, required=True, help="Input file path")
     parser.add_argument("-o", "--output-dir", type=str, required=True, help="Output file dir")
     parser.add_argument("-lp", "--lang-pair", type=str, required=True, help="Language pair")
-    parser.add_argument("-k", "--api-key", type=str, required=True, help="OpenAI api key")
+    parser.add_argument("-k", "--api-key", type=str, default=None, help="API key (省略時は .env / 環境変数から取得)")
     parser.add_argument("-m", "--model-name", type=str, default="gpt-3.5-turbo", help="Model name")
     parser.add_argument("-t", "--temperature", type=float, default=0, help="Sampling temperature")
     parser.add_argument("-s", "--start-line", type=int, default=1, help="Dataset starting line")

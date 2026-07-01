@@ -10,7 +10,8 @@ model2max_context = {
     "text-davinci-002": 4096,
     "gpt-4o-mini":16384,
     "qwen2.5-72b-instruct": 131072,
-    "Llama-3.1-70B-lnstruct": 131072
+    "Llama-3.1-70B-lnstruct": 131072,
+    "gemini-3.5-flash": 1000000,
 }
 
 class OutOfQuotaException(Exception):
@@ -40,8 +41,14 @@ class AccessTerminatedException(Exception):
             return super().__str__()
 
 def num_tokens_from_string(string: str, model_name: str) -> int:
-    """Returns the number of tokens in a text string."""
-    encoding = tiktoken.encoding_for_model(model_name)
+    """Returns the number of tokens in a text string.
+
+    tiktoken が未対応のモデル（Gemini 等）では cl100k_base に近似フォールバックする。
+    """
+    try:
+        encoding = tiktoken.encoding_for_model(model_name)
+    except KeyError:
+        encoding = tiktoken.get_encoding("cl100k_base")
     num_tokens = len(encoding.encode(string))
     return num_tokens
 
