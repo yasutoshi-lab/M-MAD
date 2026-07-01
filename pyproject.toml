@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Multidimensional Multi-Agent Debate for Advanced Machine Translation Evaluation"
 requires-python = "==3.10.*"
 dependencies = [
-    "openai==0.28.1", # コードは 0.28 系 API（openai.ChatCompletion / openai.error）を使用（Issue #1 は別途）
+    "openai>=1.30,<2", # 1.x クライアント（openai.OpenAI / chat.completions）を使用
     "backoff",
     "langcodes[data]", # display_name() に language_data が必要（stage1/stage2_3 の言語名導出）
 

@@ -2,7 +2,7 @@ import openai
 import backoff
 import time
 import random
-from openai.error import RateLimitError, APIError, ServiceUnavailableError, APIConnectionError
+from openai import OpenAI, RateLimitError, APIError, APIConnectionError, InternalServerError, APITimeoutError
 from .openai_utils import OutOfQuotaException, AccessTerminatedException
 from .openai_utils import num_tokens_from_string, model2max_context
 
@@ -24,7 +24,7 @@ class Agent:
         self.memory_lst = []
         self.sleep_time = sleep_time
 
-    @backoff.on_exception(backoff.expo, (RateLimitError, APIError, ServiceUnavailableError, APIConnectionError), max_tries=20)
+    @backoff.on_exception(backoff.expo, (RateLimitError, APIError, APIConnectionError, InternalServerError, APITimeoutError), max_tries=20)
     def query(self, messages: "list[dict]", max_tokens: int, api_key: str, temperature: float) -> str:
         """make a query
 
@@ -44,22 +44,21 @@ class Agent:
         # time.sleep(self.sleep_time)
         assert self.model_name in support_models, f"Not support {self.model_name}. Choices: {support_models}"
         try:
-            if self.model_name in support_models:
-                response = openai.ChatCompletion.create(
-                    model=self.model_name,
-                    messages=messages,
-                    temperature=temperature,
-                    max_tokens=1000,
-                    api_key=api_key,
-                )
-
-                gen = response['choices'][0]['message']['content']
+            client = OpenAI(api_key=api_key)
+            response = client.chat.completions.create(
+                model=self.model_name,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=1000,
+            )
+            gen = response.choices[0].message.content
             return gen
 
         except RateLimitError as e:
-            if "You exceeded your current quota, please check your plan and billing details" in e.user_message:
+            message = str(e)
+            if "You exceeded your current quota, please check your plan and billing details" in message:
                 raise OutOfQuotaException(api_key)
-            elif "Your access was terminated due to violation of our policies" in e.user_message:
+            elif "Your access was terminated due to violation of our policies" in message:
                 raise AccessTerminatedException(api_key)
             else:
                 raise e
