@@ -25,13 +25,17 @@ For a detailed explanation of the M-MAD framework, please refer to the paper:
 ## **💻** Running the Code
 
 ### 1) Environment Setup ###
-```cmd
+
+We use [uv](https://docs.astral.sh/uv/) with Python 3.10 for environment management.
+
+```bash
 git clone https://github.com/SU-JIAYUAN/M-MAD.git
 cd M-MAD
-conda create -n MMMD python=3.10
-conda activate MMMD
-pip install -r requirements.txt
+uv sync                 # create the virtualenv and install runtime dependencies (Python 3.10)
+uv sync --group eval    # additionally install meta-evaluation deps (numpy, mt-metrics-eval); only needed for step 4
 ```
+
+Run any command inside the environment with `uv run` (e.g. `uv run python code/stage1.py --help`).
 ### 2) Stage 1 (Dimension Partition)
 
 ```bash
