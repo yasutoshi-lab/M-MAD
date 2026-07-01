@@ -1,4 +1,5 @@
 import os
+import ast
 import json
 import random
 # random.seed(0)
@@ -61,6 +62,27 @@ def extract_json(text):
     brace_open = text.find("{")
     brace_close = text.rfind("}")
     return text[brace_open:brace_close+1]
+
+
+def parse_json_obj(text):
+    """LLM 出力の JSON 文字列を安全にパースする（eval を使わない）。
+
+    まず json.loads を試し、失敗した場合のみ ast.literal_eval（Python リテラル）で解釈する。
+    いずれも任意コード実行を伴わないため、eval の安全性・堅牢性の問題を回避できる。
+
+    Args:
+        text (str): 抽出済みの JSON/辞書リテラル文字列。
+
+    Returns:
+        dict | list: パース結果。
+
+    Raises:
+        ValueError / SyntaxError: どちらでもパースできない場合（呼び出し側でリトライ）。
+    """
+    try:
+        return json.loads(text)
+    except (json.JSONDecodeError, ValueError):
+        return ast.literal_eval(text)
 
 
 class DebatePlayer(Agent):
@@ -273,11 +295,11 @@ class Debate:
             match = extract_json(self.judge_ans)
             if match:
                 try:
-                    self.judge_ans = eval(match)
+                    self.judge_ans = parse_json_obj(match)
                     self.judge.add_memory(self.judge_ans)
                     break
                 except Exception as e:
-                    print(f"Error in eval: {e}. Retrying...")
+                    print(f"Error parsing judge output: {e}. Retrying...")
 
             if count >= 10:
                 self.judge_ans = {'annotations': [{'error span': 'all', 'category': 'non-translation', 'severity': 'major', 'is_source_error': 'no'}]}
