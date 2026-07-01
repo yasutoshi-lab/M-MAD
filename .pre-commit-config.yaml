@@ -1,0 +1,9 @@
+# pre-commit（任意・ローカルの fail-fast 補助）。本命のゲートは GitHub Actions CI。
+# 有効化: `uv run pre-commit install`
+# ruff のルール設定は pyproject.toml の [tool.ruff] を共有する。
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.20
+    hooks:
+      - id: ruff
+        args: [--fix]

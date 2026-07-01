@@ -1,8 +1,5 @@
-import openai
 import backoff
-import time
-import random
-from openai import OpenAI, RateLimitError, APIError, APIConnectionError, InternalServerError, APITimeoutError
+from openai import RateLimitError, APIError, APIConnectionError, InternalServerError, APITimeoutError
 from .openai_utils import OutOfQuotaException, AccessTerminatedException
 from .config import build_openai_client
 

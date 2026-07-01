@@ -1,7 +1,6 @@
 import os
 import ast
 import json
-import random
 # random.seed(0)
 import argparse
 import importlib
@@ -10,7 +9,6 @@ from langcodes import Language
 from utils.agent import Agent
 from datetime import datetime
 from tqdm import tqdm
-import openai
 
 
 NAME_LIST=[
@@ -227,7 +225,7 @@ class Debate:
         Returns:
             None
         """
-        print(f"\n===== Translation Eval Task =====\n")
+        print("\n===== Translation Eval Task =====\n")
 
     def create_agents(self):
         """NAME_LIST に基づき 5 プレイヤー（4 次元エージェント + Judge）を生成する。
@@ -434,7 +432,7 @@ if __name__ == "__main__":
 
     start_line = args.start_line
     inputs = open(args.input_file, "r").readlines()
-    inputs = [l.strip() for l in inputs[start_line-1:]]
+    inputs = [line.strip() for line in inputs[start_line-1:]]
 
     save_file_dir = args.output_dir
     if not os.path.exists(save_file_dir):
