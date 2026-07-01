@@ -146,7 +146,6 @@ if __name__ == "__main__":
     n = len(all_json_data)
 
     random.seed(0)
-    response_dict = {}
 
     # Stage2&3 の出力先も data/ 配下に統一（Stage1 出力と同じ場所に揃える）。
     folder_path = os.path.join(MAD_PATH, "data", f"stage2_3_{lp}_{system}")
@@ -155,6 +154,8 @@ if __name__ == "__main__":
         ending = n
     for i in range(starting, ending):
         print(f"-------------------The {i}th sample:---------------------")
+        # サンプルごとに初期化し、前サンプルの値が最終 Judge に混入しないようにする。
+        response_dict = {}
         if os.path.exists(f"{folder_path}/{i}_v1.json") and os.path.getsize(f"{folder_path}/{i}_v1.json") > 0:
             continue
         with open(f"{folder_path}/{i}_v1.json", "w", encoding='utf-8') as f:
