@@ -29,8 +29,8 @@ def clean_env(monkeypatch):
     monkeypatch.setattr(config, "_load_dotenv", lambda: None)
     for var in [
         "LLM_PROVIDER", "LLM_MODEL", "LLM_BASE_URL", "LLM_API_KEY",
-        "OPENAI_API_KEY", "OPENAI_BASE_URL", "GEMINI_API_KEY", "GCP_PROJECT",
-        "GOOGLE_CLOUD_PROJECT", "LLM_LOCATION",
+        "OPENAI_API_KEY", "OPENAI_BASE_URL", "GEMINI_API_KEY", "ANTHROPIC_API_KEY",
+        "GCP_PROJECT", "GOOGLE_CLOUD_PROJECT", "LLM_LOCATION",
     ]:
         monkeypatch.delenv(var, raising=False)
     return config

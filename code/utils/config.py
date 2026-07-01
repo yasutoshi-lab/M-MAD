@@ -36,7 +36,7 @@ def get_llm_config():
     """LLM プロバイダ設定を環境変数（および .env）から解決して返す。
 
     環境変数:
-        LLM_PROVIDER : "openai"（既定） | "gemini" | "vertex"
+        LLM_PROVIDER : "openai"（既定） | "gemini" | "vertex" | "anthropic"
         LLM_MODEL    : モデル名（省略時はプロバイダ既定。vertex は google/ プレフィックスを自動付与）
         LLM_BASE_URL : OpenAI 互換エンドポイント（省略時はプロバイダ既定）
         LLM_API_KEY  : API キー（省略時は OPENAI_API_KEY / GEMINI_API_KEY を参照）
@@ -72,6 +72,14 @@ def get_llm_config():
                 "LLM_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai/"
             ),
             "api_key": os.environ.get("LLM_API_KEY") or os.environ.get("GEMINI_API_KEY"),
+        }
+
+    if provider == "anthropic":
+        return {
+            "provider": "anthropic",
+            "model": os.environ.get("LLM_MODEL", "claude-haiku-4-5"),
+            "base_url": os.environ.get("LLM_BASE_URL", "https://api.anthropic.com/v1/"),
+            "api_key": os.environ.get("LLM_API_KEY") or os.environ.get("ANTHROPIC_API_KEY"),
         }
 
     return {

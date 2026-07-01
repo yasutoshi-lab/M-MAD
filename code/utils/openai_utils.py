@@ -12,6 +12,7 @@ model2max_context = {
     "qwen2.5-72b-instruct": 131072,
     "Llama-3.1-70B-Instruct": 131072,
     "gemini-3.5-flash": 1000000,
+    "claude-haiku-4-5": 200000,
 }
 
 class OutOfQuotaException(Exception):
