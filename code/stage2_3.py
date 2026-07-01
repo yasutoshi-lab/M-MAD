@@ -4,7 +4,9 @@ import random
 import os
 import re
 import argparse
+import backoff
 from langcodes import Language
+from openai import RateLimitError, APIError, APIConnectionError, InternalServerError, APITimeoutError
 from utils.config import build_openai_client
 
 NUM_AGENTS = 2
@@ -88,11 +90,24 @@ def construct_assistant_message(completion):
     return {"role": "assistant", "content": content}
 
 
+def _log_backoff(details):
+    """backoff リトライ時に試行回数・待機・例外内容を標準出力へ記録する。"""
+    exc = details.get("exception")
+    print(f"[warn] LLM call failed (attempt {details['tries']}), backing off {details['wait']:.1f}s: {exc}")
+
+
+@backoff.on_exception(
+    backoff.expo,
+    (RateLimitError, APIError, APIConnectionError, InternalServerError, APITimeoutError),
+    max_tries=5,
+    on_backoff=_log_backoff,
+)
 def generate_answer(answer_context):
     """設定（OpenAI / Gemini / Vertex）に基づき LLM へ問い合わせ応答を得る。
 
     build_openai_client() で client とモデルを解決し、与えられたチャット履歴で
-    chat.completions を 1 件生成する。
+    chat.completions を 1 件生成する。API 由来の一時的エラーは backoff により指数
+    バックオフで最大 5 回までリトライし、各リトライ内容をログ出力する。
 
     Args:
         answer_context (list[dict]): messages 形式のチャット履歴。
@@ -164,7 +179,8 @@ def load_json_files(folder_path):
             with open(file_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
                 json_data.append(data)
-        except:
+        except Exception as e:
+            print(f"[warn] Failed to load {json_file}: {e}")
             json_data.append(None)
     return json_data
 
@@ -275,10 +291,7 @@ def run_dimension_debate(mqm_agent_index, annotation, source_seg, target_seg, so
                 agent_contexts_other = agent_contexts[:j] + agent_contexts[j+1:]
                 message = construct_message(agent_contexts_other, 2 * round)
                 agent_context.append(message)
-                try:
-                    completion = generate_answer(agent_context)
-                except:
-                    completion = generate_answer(agent_context)
+                completion = generate_answer(agent_context)
                 assistant_message = construct_assistant_message(completion)
                 agent_context.append(assistant_message)
 
@@ -290,10 +303,7 @@ def run_dimension_debate(mqm_agent_index, annotation, source_seg, target_seg, so
             print("annotation1: ", agent_contexts[0][-1]['content'], "\n", annotation1)
             print("annotation2: ", agent_contexts[1][-1]['content'], "\n",annotation2)
 
-            try:
-                judge_response = generate_answer(ask_prompt(judge_prompt.format(first_annotations = annotation1, second_annotations = annotation2)))
-            except:
-                judge_response = generate_answer(ask_prompt(judge_prompt.format(first_annotations = annotation1, second_annotations = annotation2)))
+            judge_response = generate_answer(ask_prompt(judge_prompt.format(first_annotations = annotation1, second_annotations = annotation2)))
             judge_ans = judge_response.choices[0].message.content
 
             if "yes" in judge_ans:
@@ -316,10 +326,7 @@ def run_final_judge(response_dict, source_seg, target_seg, source_lang, target_l
     elif is_only_double_quotes(source_seg) and is_only_double_quotes(target_seg):
         response = '{"annotations":[]}'
     else:
-        try:
-            response = generate_answer([system_prompt, use_prompt]).choices[0].message.content
-        except:
-            response = generate_answer([system_prompt, use_prompt]).choices[0].message.content
+        response = generate_answer([system_prompt, use_prompt]).choices[0].message.content
     print("response", response)
     return extract_annotations(response)
 
