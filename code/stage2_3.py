@@ -2,6 +2,7 @@ import json
 import time
 import random
 import openai
+from openai import OpenAI
 import sys
 import os
 import re
@@ -42,13 +43,14 @@ def ask_prompt(content):
     return [{"role": "user", "content": content}]
 
 def construct_assistant_message(completion):
-    content = completion["choices"][0]["message"]["content"]
+    content = completion.choices[0].message.content
     return {"role": "assistant", "content": content}
 
 
 def generate_answer(answer_context):
-    # try:
-    completion = openai.ChatCompletion.create(
+    # OPENAI_API_KEY 環境変数からキーを読む 1.x クライアント（呼び出し時に生成）。
+    client = OpenAI()
+    completion = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=answer_context,
                 n=1)
@@ -207,7 +209,7 @@ if __name__ == "__main__":
                             judge_response = generate_answer(ask_prompt(judge_prompt.format(first_annotations = annotation1, second_annotations = annotation2)))
                         except:
                             judge_response = generate_answer(ask_prompt(judge_prompt.format(first_annotations = annotation1, second_annotations = annotation2)))
-                        judge_ans = judge_response["choices"][0]["message"]["content"]
+                        judge_ans = judge_response.choices[0].message.content
 
                         if "yes" in judge_ans:
                             response_dict[mqm_agents[mqm_agent_index]] = extract_annotations(agent_contexts[0][-1]['content'])
@@ -228,9 +230,9 @@ if __name__ == "__main__":
                 response = '{"annotations":[]}'
             else:
                 try:
-                    response = generate_answer([system_prompt, use_prompt])["choices"][0]["message"]["content"]
+                    response = generate_answer([system_prompt, use_prompt]).choices[0].message.content
                 except:
-                    response = generate_answer([system_prompt, use_prompt])["choices"][0]["message"]["content"]
+                    response = generate_answer([system_prompt, use_prompt]).choices[0].message.content
             print("response", response)
             response = extract_annotations(response)
             response_dict["judge"] = response
