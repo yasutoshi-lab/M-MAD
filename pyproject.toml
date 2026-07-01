@@ -6,7 +6,8 @@ requires-python = "==3.10.*"
 dependencies = [
     "openai==0.28.1", # コードは 0.28 系 API（openai.ChatCompletion / openai.error）を使用（Issue #1 は別途）
     "backoff",
-    "langcodes",
+    "langcodes[data]", # display_name() に language_data が必要（stage1/stage2_3 の言語名導出）
+
     "tiktoken",
     "tqdm==4.66.1",
 ]

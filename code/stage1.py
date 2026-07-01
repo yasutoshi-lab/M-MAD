@@ -3,12 +3,12 @@ import json
 import random
 # random.seed(0)
 import argparse
+import importlib
 from langcodes import Language
 from utils.agent import Agent
 from datetime import datetime
 from tqdm import tqdm
 import openai
-from few_shot_demos import accuracy_user_shot, accuracy_mem_shot, fluency_user_shot, fluency_mem_shot, term_user_shot, term_mem_shot, style_user_shot, style_mem_shot, nontran_user_shot, nontran_mem_shot
 
 
 NAME_LIST=[
@@ -18,6 +18,44 @@ NAME_LIST=[
     "Style Agent",
     "Judge"
 ]
+
+# 言語ペアごとの few-shot デモモジュール（論文の 4-shot demonstration strategy に対応）。
+# 完全一致するペアが最優先。専用デモが無いペアはターゲット言語で選び、
+# それでも無ければ English 系（zh-en の few_shot_demos）にフォールバックする。
+DEMO_MODULE_BY_PAIR = {
+    "zh-en": "few_shot_demos",
+    "en-de": "few_shot_demos_de",
+    "he-en": "few_shot_demos_he",
+}
+DEMO_MODULE_BY_TARGET = {
+    "en": "few_shot_demos",
+    "de": "few_shot_demos_de",
+}
+DEFAULT_DEMO_MODULE = "few_shot_demos"
+
+
+def load_few_shots(lang_pair: str):
+    """言語ペアに対応する few-shot デモモジュールを解決して import する。
+
+    Args:
+        lang_pair (str): "zh-en" のような言語ペア。
+
+    Returns:
+        module: accuracy_user_shot 等の few-shot 変数群を持つモジュール。
+
+    解決順: 1) 完全一致ペア → 2) ターゲット言語デフォルト → 3) English 系デフォルト。
+    完全一致しない場合は、専用 few-shot が無い旨の warning を表示する。
+    """
+    module_name = DEMO_MODULE_BY_PAIR.get(lang_pair)
+    if module_name is None:
+        tgt_code = lang_pair.split("-")[-1]
+        module_name = DEMO_MODULE_BY_TARGET.get(tgt_code, DEFAULT_DEMO_MODULE)
+        print(
+            f"[warn] No dedicated few-shot demos for language pair '{lang_pair}'. "
+            f"Falling back to '{module_name}'. Results may deviate from the paper's "
+            f"per-language 4-shot setup."
+        )
+    return importlib.import_module(module_name)
 
 def extract_json(text):
     brace_open = text.find("{")
@@ -40,7 +78,8 @@ class Debate:
             openai_api_key: str=None,
             prompts_path: str=None,
             max_round: int=3,
-            sleep_time: float=0
+            sleep_time: float=0,
+            few_shots=None
         ) -> None:
 
         self.model_name = model_name
@@ -50,6 +89,7 @@ class Debate:
         self.openai_api_key = openai_api_key
         self.max_round = max_round
         self.sleep_time = sleep_time
+        self.few_shots = few_shots
 
         # init save file
         now = datetime.now()
@@ -106,6 +146,14 @@ class Debate:
         self.judge = self.players[4]
 
     def init_agents(self):
+        # 言語ペアに応じて選択された few-shot デモをローカルに束ねる（以降の参照はそのまま）。
+        fs = self.few_shots
+        accuracy_user_shot, accuracy_mem_shot = fs.accuracy_user_shot, fs.accuracy_mem_shot
+        fluency_user_shot, fluency_mem_shot = fs.fluency_user_shot, fs.fluency_mem_shot
+        term_user_shot, term_mem_shot = fs.term_user_shot, fs.term_mem_shot
+        style_user_shot, style_mem_shot = fs.style_user_shot, fs.style_mem_shot
+        nontran_user_shot, nontran_mem_shot = fs.nontran_user_shot, fs.nontran_mem_shot
+
         self.accuracy_agent.set_meta_prompt(self.save_file['base_system_prompt'])
         self.fluency_agent.set_meta_prompt(self.save_file['base_system_prompt'])
         self.term_agent.set_meta_prompt(self.save_file['base_system_prompt'])
@@ -295,6 +343,9 @@ if __name__ == "__main__":
 
     config = json.load(open(f"{MAD_path}/code/utils/stage1.json", "r"))
 
+    # 言語ペアに対応する few-shot デモを解決（専用が無ければフォールバック）。
+    few_shots = load_few_shots(args.lang_pair)
+
     start_line = args.start_line
     inputs = open(args.input_file, "r").readlines()
     inputs = [l.strip() for l in inputs[start_line-1:]]
@@ -316,7 +367,7 @@ if __name__ == "__main__":
             with open(prompts_path, 'w') as file:
                 json.dump(config, file, ensure_ascii=False, indent=4)
                 
-            debate = Debate(save_file_dir=save_file_dir, num_players=4, openai_api_key=openai_api_key, prompts_path=prompts_path, temperature=0, sleep_time=0)
+            debate = Debate(save_file_dir=save_file_dir, num_players=4, openai_api_key=openai_api_key, prompts_path=prompts_path, temperature=0, sleep_time=0, few_shots=few_shots)
             if annotated == "no":
                 debate.save_file_to_json_without_annoatation(id+start_line-1)
             else:
