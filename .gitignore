@@ -10,8 +10,9 @@ __pycache__/
 *.pyc
 .pytest_cache/
 
-## Generated outputs (Stage1 / Stage2&3)
+## Generated outputs (Stage1 / Stage2&3) — すべて data/ 配下に統一
 data/output_*/
+data/stage2_3_*/
 stage2_3_*/
 
 ## Agents Files

@@ -137,14 +137,19 @@ if __name__ == "__main__":
     max_rounds = 4
     mqm_agents = ["Accuracy", "Fluency", "Terminology", "Style"]
 
-    folder_path = f"M-MAD/data/output_{lp}_{system}_v1"
-    all_json_data = load_json_files(folder_path)
+    # リポジトリルートをスクリプト位置から解決（実行ディレクトリに依存しない）。
+    MAD_PATH = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    # Stage1 の出力（入力）: data/output_{lp}_{system}_v1
+    input_dir = os.path.join(MAD_PATH, "data", f"output_{lp}_{system}_v1")
+    all_json_data = load_json_files(input_dir)
     n = len(all_json_data)
 
     random.seed(0)
     response_dict = {}
 
-    folder_path = f"stage2_3_{lp}_{system}"
+    # Stage2&3 の出力先も data/ 配下に統一（Stage1 出力と同じ場所に揃える）。
+    folder_path = os.path.join(MAD_PATH, "data", f"stage2_3_{lp}_{system}")
     os.makedirs(folder_path, exist_ok=True)
     if ending == 2000:
         ending = n
