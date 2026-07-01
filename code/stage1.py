@@ -193,16 +193,16 @@ class Debate:
         self.accuracy_agent.add_memory(nontran_mem_shot[0])
 
         self.accuracy_agent.add_event(self.save_file['accuracy_agent'])
+        self.accuracy_annotations = '{"annotations": []}'  # 全リトライ失敗時のフォールバック
         count = 0
         retry = True
         while retry and count < 10:
+            count += 1
             try:
                 self.accuracy_annotations = self.accuracy_agent.ask()
                 retry = False
             except Exception as e:
                 print(f"An error occurred: {e}")
-                continue
-            count += 1
 
         self.accuracy_agent.add_memory(self.accuracy_annotations)
 
@@ -218,17 +218,16 @@ class Debate:
         self.fluency_agent.add_memory(nontran_mem_shot[1])
 
         self.fluency_agent.add_event(self.save_file['fluency_agent'])
-        
+        self.fluency_annotations = '{"annotations": []}'  # 全リトライ失敗時のフォールバック
         retry = True
         count = 0
         while retry and count < 10:
+            count += 1
             try:
                 self.fluency_annotations = self.fluency_agent.ask()
                 retry = False
             except Exception as e:
                 print(f"An error occurred: {e}")
-                continue
-            count += 1
 
         self.fluency_agent.add_memory(self.fluency_annotations)
 
@@ -243,17 +242,16 @@ class Debate:
         self.term_agent.add_memory(nontran_mem_shot[2])
 
         self.term_agent.add_event(self.save_file['term_agent'])
-        
+        self.term_annotations = '{"annotations": []}'  # 全リトライ失敗時のフォールバック
         retry = True
         count = 0
-        while retry:
+        while retry and count < 10:
+            count += 1
             try:
                 self.term_annotations = self.term_agent.ask()
                 retry = False
             except Exception as e:
                 print(f"An error occurred: {e}")
-                continue
-            count += 1
 
         self.term_agent.add_memory(self.term_annotations)
 
@@ -267,32 +265,31 @@ class Debate:
         self.style_agent.add_memory(nontran_mem_shot[3])
 
         self.style_agent.add_event(self.save_file['style_agent'])
-        
-
+        self.style_annotations = '{"annotations": []}'  # 全リトライ失敗時のフォールバック
         retry = True
         count = 0
-        while retry:
+        while retry and count < 10:
+            count += 1
             try:
                 self.style_annotations = self.style_agent.ask()
                 retry = False
             except Exception as e:
                 print(f"An error occurred: {e}")
-                continue
-            count += 1
 
         self.style_agent.add_memory(self.style_annotations)
 
         self.judge.add_event(self.save_file['judge_agent'].replace('##accuracy_annotations##', self.accuracy_annotations).replace('##fluency_annotations##', self.fluency_annotations).replace('##term_annotations##', self.term_annotations).replace('##style_annotations##', self.style_annotations))
         count = 0
-        while True and count < 10:
+        self.judge_ans = None
+        while count < 10:
+            count += 1
             try:
-                self.judge_ans = self.judge.ask()
+                raw = self.judge.ask()
             except Exception as e:
                 print(f"An error occurred: {e}")
                 continue
-            
-            count += 1
-            match = extract_json(self.judge_ans)
+
+            match = extract_json(raw)
             if match:
                 try:
                     self.judge_ans = parse_json_obj(match)
@@ -301,9 +298,10 @@ class Debate:
                 except Exception as e:
                     print(f"Error parsing judge output: {e}. Retrying...")
 
-            if count >= 10:
-                self.judge_ans = {'annotations': [{'error span': 'all', 'category': 'non-translation', 'severity': 'major', 'is_source_error': 'no'}]}
-                self.judge.add_memory(self.judge_ans)
+        # 10 回で有効な JSON を得られなかった場合は non-translation にフォールバック
+        if not isinstance(self.judge_ans, dict):
+            self.judge_ans = {'annotations': [{'error span': 'all', 'category': 'non-translation', 'severity': 'major', 'is_source_error': 'no'}]}
+            self.judge.add_memory(self.judge_ans)
 
     def round_dct(self, num: int):
         dct = {
