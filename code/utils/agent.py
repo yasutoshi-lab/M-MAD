@@ -5,8 +5,9 @@ import random
 from openai import OpenAI, RateLimitError, APIError, APIConnectionError, InternalServerError, APITimeoutError
 from .openai_utils import OutOfQuotaException, AccessTerminatedException
 from .openai_utils import num_tokens_from_string, model2max_context
+from .config import build_openai_client
 
-support_models = ['gpt-3.5-turbo', 'gpt-3.5-turbo-0301', 'gpt-4o-mini', 'qwen2.5-72b-instruct', 'Llama-3.1-70B-lnstruct']
+support_models = ['gpt-3.5-turbo', 'gpt-3.5-turbo-0301', 'gpt-4o-mini', 'qwen2.5-72b-instruct', 'Llama-3.1-70B-lnstruct', 'gemini-3.5-flash']
 
 class Agent:
     def __init__(self, model_name: str, name: str, temperature: float, sleep_time: float=0) -> None:
@@ -42,11 +43,12 @@ class Agent:
             str: the return msg
         """
         # time.sleep(self.sleep_time)
-        assert self.model_name in support_models, f"Not support {self.model_name}. Choices: {support_models}"
+        # プロバイダ設定（OpenAI / Gemini）から client と使用モデルを解決する。
+        client, model = build_openai_client(fallback_api_key=api_key)
+        assert model in support_models, f"Not support {model}. Choices: {support_models}"
         try:
-            client = OpenAI(api_key=api_key)
             response = client.chat.completions.create(
-                model=self.model_name,
+                model=model,
                 messages=messages,
                 temperature=temperature,
                 max_tokens=1000,
@@ -95,7 +97,7 @@ class Agent:
         """
         # query
         num_context_token = sum([num_tokens_from_string(m["content"], self.model_name) for m in self.memory_lst])
-        max_token = model2max_context[self.model_name] - num_context_token
+        max_token = model2max_context.get(self.model_name, 16384) - num_context_token
         print(self.memory_lst)
 
         return self.query(self.memory_lst, max_token, api_key=self.openai_api_key, temperature=temperature if temperature else self.temperature)

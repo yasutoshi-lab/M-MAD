@@ -36,6 +36,25 @@ uv sync --group eval    # additionally install meta-evaluation deps (numpy, mt-m
 ```
 
 Run any command inside the environment with `uv run` (e.g. `uv run python code/stage1.py --help`).
+
+#### LLM provider (OpenAI or Gemini)
+
+The LLM backend is selected via environment variables (loaded automatically from a `.env` file at the repo root; see `.env.example`).
+
+```bash
+cp .env.example .env
+# then edit .env
+```
+
+- **Gemini (Google AI Studio, OpenAI-compatible endpoint)**:
+  ```
+  LLM_PROVIDER=gemini
+  LLM_MODEL=gemini-3.5-flash
+  GEMINI_API_KEY=your-gemini-api-key
+  ```
+  Uses `base_url=https://generativelanguage.googleapis.com/v1beta/openai/`.
+- **OpenAI** (default): set `LLM_PROVIDER=openai` and `OPENAI_API_KEY`.
+
 ### 2) Stage 1 (Dimension Partition)
 
 ```bash

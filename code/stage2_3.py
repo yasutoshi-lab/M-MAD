@@ -1,12 +1,11 @@
 import json
 import time
 import random
-import openai
-from openai import OpenAI
 import sys
 import os
 import re
 from langcodes import Language
+from utils.config import build_openai_client
 
 system = sys.argv[1]
 lp = sys.argv[2]
@@ -48,10 +47,10 @@ def construct_assistant_message(completion):
 
 
 def generate_answer(answer_context):
-    # OPENAI_API_KEY 環境変数からキーを読む 1.x クライアント（呼び出し時に生成）。
-    client = OpenAI()
+    # プロバイダ設定（OpenAI / Gemini）から client と使用モデルを解決（呼び出し時に生成）。
+    client, model = build_openai_client()
     completion = client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=model,
                 messages=answer_context,
                 n=1)
     return completion
