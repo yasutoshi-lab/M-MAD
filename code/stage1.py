@@ -141,7 +141,7 @@ class Debate:
         if self.save_file['accuracy_annotations'] == "":
             self.create_base()
 
-        self.creat_agents()
+        self.create_agents()
         self.init_agents()
 
 
@@ -157,7 +157,7 @@ class Debate:
     def create_base(self):
         print(f"\n===== Translation Eval Task =====\n")
 
-    def creat_agents(self):
+    def create_agents(self):
         self.players = [
             DebatePlayer(model_name=self.model_name, name=name, temperature=self.temperature, openai_api_key=self.openai_api_key, sleep_time=self.sleep_time) for name in NAME_LIST
         ]
@@ -166,6 +166,39 @@ class Debate:
         self.term_agent = self.players[2]
         self.style_agent = self.players[3]
         self.judge = self.players[4]
+
+    def _eval_dimension(self, agent, user_shots, mem_shots, nontran_user, nontran_mem, task_prompt):
+        """1 次元エージェントの few-shot 注入・タスク付与・リトライ実行を共通化する。
+
+        Args:
+            agent: 対象の DebatePlayer。
+            user_shots / mem_shots: few-shot の user / assistant 例（各 3 件）。
+            nontran_user / nontran_mem: non-translation の few-shot 例（1 件）。
+            task_prompt (str): 評価タスクのプロンプト。
+
+        Returns:
+            str: エージェントのアノテーション。全リトライ失敗時は空アノテーションを返す。
+        """
+        for user_shot, mem_shot in zip(user_shots, mem_shots):
+            agent.add_event(user_shot)
+            agent.add_memory(mem_shot)
+        agent.add_event(nontran_user)
+        agent.add_memory(nontran_mem)
+
+        agent.add_event(task_prompt)
+        annotations = '{"annotations": []}'  # 全リトライ失敗時のフォールバック
+        count = 0
+        retry = True
+        while retry and count < 10:
+            count += 1
+            try:
+                annotations = agent.ask()
+                retry = False
+            except Exception as e:
+                print(f"An error occurred: {e}")
+
+        agent.add_memory(annotations)
+        return annotations
 
     def init_agents(self):
         # 言語ペアに応じて選択された few-shot デモをローカルに束ねる（以降の参照はそのまま）。
@@ -183,100 +216,21 @@ class Debate:
         self.judge.set_meta_prompt(self.save_file['judge_system_prompt'])
         
 
-        self.accuracy_agent.add_event(accuracy_user_shot[0])
-        self.accuracy_agent.add_memory(accuracy_mem_shot[0])
-        self.accuracy_agent.add_event(accuracy_user_shot[1])
-        self.accuracy_agent.add_memory(accuracy_mem_shot[1])
-        self.accuracy_agent.add_event(accuracy_user_shot[2])
-        self.accuracy_agent.add_memory(accuracy_mem_shot[2])
-        self.accuracy_agent.add_event(nontran_user_shot[0])
-        self.accuracy_agent.add_memory(nontran_mem_shot[0])
+        self.accuracy_annotations = self._eval_dimension(
+            self.accuracy_agent, accuracy_user_shot, accuracy_mem_shot,
+            nontran_user_shot[0], nontran_mem_shot[0], self.save_file['accuracy_agent'])
 
-        self.accuracy_agent.add_event(self.save_file['accuracy_agent'])
-        self.accuracy_annotations = '{"annotations": []}'  # 全リトライ失敗時のフォールバック
-        count = 0
-        retry = True
-        while retry and count < 10:
-            count += 1
-            try:
-                self.accuracy_annotations = self.accuracy_agent.ask()
-                retry = False
-            except Exception as e:
-                print(f"An error occurred: {e}")
+        self.fluency_annotations = self._eval_dimension(
+            self.fluency_agent, fluency_user_shot, fluency_mem_shot,
+            nontran_user_shot[1], nontran_mem_shot[1], self.save_file['fluency_agent'])
 
-        self.accuracy_agent.add_memory(self.accuracy_annotations)
+        self.term_annotations = self._eval_dimension(
+            self.term_agent, term_user_shot, term_mem_shot,
+            nontran_user_shot[2], nontran_mem_shot[2], self.save_file['term_agent'])
 
-
-
-        self.fluency_agent.add_event(fluency_user_shot[0])
-        self.fluency_agent.add_memory(fluency_mem_shot[0])
-        self.fluency_agent.add_event(fluency_user_shot[1])
-        self.fluency_agent.add_memory(fluency_mem_shot[1])
-        self.fluency_agent.add_event(fluency_user_shot[2])
-        self.fluency_agent.add_memory(fluency_mem_shot[2])
-        self.fluency_agent.add_event(nontran_user_shot[1])
-        self.fluency_agent.add_memory(nontran_mem_shot[1])
-
-        self.fluency_agent.add_event(self.save_file['fluency_agent'])
-        self.fluency_annotations = '{"annotations": []}'  # 全リトライ失敗時のフォールバック
-        retry = True
-        count = 0
-        while retry and count < 10:
-            count += 1
-            try:
-                self.fluency_annotations = self.fluency_agent.ask()
-                retry = False
-            except Exception as e:
-                print(f"An error occurred: {e}")
-
-        self.fluency_agent.add_memory(self.fluency_annotations)
-
-
-        self.term_agent.add_event(term_user_shot[0])
-        self.term_agent.add_memory(term_mem_shot[0])
-        self.term_agent.add_event(term_user_shot[1])
-        self.term_agent.add_memory(term_mem_shot[1])
-        self.term_agent.add_event(term_user_shot[2])
-        self.term_agent.add_memory(term_mem_shot[2])
-        self.term_agent.add_event(nontran_user_shot[2])
-        self.term_agent.add_memory(nontran_mem_shot[2])
-
-        self.term_agent.add_event(self.save_file['term_agent'])
-        self.term_annotations = '{"annotations": []}'  # 全リトライ失敗時のフォールバック
-        retry = True
-        count = 0
-        while retry and count < 10:
-            count += 1
-            try:
-                self.term_annotations = self.term_agent.ask()
-                retry = False
-            except Exception as e:
-                print(f"An error occurred: {e}")
-
-        self.term_agent.add_memory(self.term_annotations)
-
-        self.style_agent.add_event(style_user_shot[0])
-        self.style_agent.add_memory(style_mem_shot[0])
-        self.style_agent.add_event(style_user_shot[1])
-        self.style_agent.add_memory(style_mem_shot[1])
-        self.style_agent.add_event(style_user_shot[2])
-        self.style_agent.add_memory(style_mem_shot[2])
-        self.style_agent.add_event(nontran_user_shot[3])
-        self.style_agent.add_memory(nontran_mem_shot[3])
-
-        self.style_agent.add_event(self.save_file['style_agent'])
-        self.style_annotations = '{"annotations": []}'  # 全リトライ失敗時のフォールバック
-        retry = True
-        count = 0
-        while retry and count < 10:
-            count += 1
-            try:
-                self.style_annotations = self.style_agent.ask()
-                retry = False
-            except Exception as e:
-                print(f"An error occurred: {e}")
-
-        self.style_agent.add_memory(self.style_annotations)
+        self.style_annotations = self._eval_dimension(
+            self.style_agent, style_user_shot, style_mem_shot,
+            nontran_user_shot[3], nontran_mem_shot[3], self.save_file['style_agent'])
 
         self.judge.add_event(self.save_file['judge_agent'].replace('##accuracy_annotations##', self.accuracy_annotations).replace('##fluency_annotations##', self.fluency_annotations).replace('##term_annotations##', self.term_annotations).replace('##style_annotations##', self.style_annotations))
         count = 0
@@ -303,12 +257,6 @@ class Debate:
             self.judge_ans = {'annotations': [{'error span': 'all', 'category': 'non-translation', 'severity': 'major', 'is_source_error': 'no'}]}
             self.judge.add_memory(self.judge_ans)
 
-    def round_dct(self, num: int):
-        dct = {
-            1: 'first', 2: 'second', 3: 'third', 4: 'fourth', 5: 'fifth', 6: 'sixth', 7: 'seventh', 8: 'eighth', 9: 'ninth', 10: 'tenth'
-        }
-        return dct[num]
-            
     def save_file_to_json(self, id):
         now = datetime.now()
         current_time = now.strftime("%Y-%m-%d_%H:%M:%S")
@@ -319,7 +267,7 @@ class Debate:
         with open(save_file_path, 'w') as f:
             f.write(json_str)
     
-    def save_file_to_json_without_annoatation(self, id):
+    def save_file_to_json_without_annotation(self, id):
         save_file_path = os.path.join(self.save_file_dir, f"{id}_v1.json")
         json_str = json.dumps("None")
         with open(save_file_path, 'w') as f:
@@ -389,7 +337,7 @@ if __name__ == "__main__":
                 
             debate = Debate(save_file_dir=save_file_dir, openai_api_key=openai_api_key, prompts_path=prompts_path, temperature=0, sleep_time=0, few_shots=few_shots)
             if annotated == "no":
-                debate.save_file_to_json_without_annoatation(id+start_line-1)
+                debate.save_file_to_json_without_annotation(id+start_line-1)
             else:
                 debate.run()
                 debate.save_file_to_json(id+start_line-1)
