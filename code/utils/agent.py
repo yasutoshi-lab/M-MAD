@@ -7,7 +7,7 @@ from .openai_utils import OutOfQuotaException, AccessTerminatedException
 from .openai_utils import num_tokens_from_string, model2max_context
 from .config import build_openai_client
 
-support_models = ['gpt-3.5-turbo', 'gpt-3.5-turbo-0301', 'gpt-4o-mini', 'qwen2.5-72b-instruct', 'Llama-3.1-70B-lnstruct', 'gemini-3.5-flash']
+support_models = ['gpt-3.5-turbo', 'gpt-3.5-turbo-0301', 'gpt-4o-mini', 'qwen2.5-72b-instruct', 'Llama-3.1-70B-lnstruct', 'gemini-3.5-flash', 'google/gemini-3.5-flash']
 
 class Agent:
     def __init__(self, model_name: str, name: str, temperature: float, sleep_time: float=0) -> None:

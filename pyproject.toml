@@ -6,6 +6,7 @@ requires-python = "==3.10.*"
 dependencies = [
     "openai>=1.30,<2", # 1.x クライアント（openai.OpenAI / chat.completions）を使用
     "backoff",
+    "google-auth", # Vertex(Agent Platform) の ADC OAuth トークン取得に使用
     "langcodes[data]", # display_name() に language_data が必要（stage1/stage2_3 の言語名導出）
 
     "tiktoken",

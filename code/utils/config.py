@@ -20,21 +20,49 @@ def _load_dotenv():
             os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
 
+def _vertex_base_url(project: str, location: str) -> str:
+    """Vertex(Agent Platform) の OpenAI 互換エンドポイント URL を組み立てる。
+
+    global は region プレフィックス無しのホストを使う。
+    """
+    if location == "global":
+        host = "aiplatform.googleapis.com"
+    else:
+        host = f"{location}-aiplatform.googleapis.com"
+    return f"https://{host}/v1/projects/{project}/locations/{location}/endpoints/openapi"
+
+
 def get_llm_config():
     """LLM プロバイダ設定を環境変数（および .env）から解決して返す。
 
     環境変数:
-        LLM_PROVIDER : "openai"（既定） | "gemini"
-        LLM_MODEL    : モデル名（省略時はプロバイダ既定）
+        LLM_PROVIDER : "openai"（既定） | "gemini" | "vertex"
+        LLM_MODEL    : モデル名（省略時はプロバイダ既定。vertex は google/ プレフィックスを自動付与）
         LLM_BASE_URL : OpenAI 互換エンドポイント（省略時はプロバイダ既定）
         LLM_API_KEY  : API キー（省略時は OPENAI_API_KEY / GEMINI_API_KEY を参照）
+        GCP_PROJECT / LLM_LOCATION : vertex 利用時のプロジェクトとリージョン（既定 location=global）
 
     Returns:
-        dict: provider / model / base_url / api_key を持つ設定辞書。
-              base_url が None の場合は OpenAI の既定エンドポイントを使う。
+        dict: provider / model / base_url / api_key（vertex は None、トークンは
+              build_openai_client() が ADC から解決）を持つ設定辞書。
     """
     _load_dotenv()
     provider = os.environ.get("LLM_PROVIDER", "openai").lower()
+
+    if provider == "vertex":
+        project = os.environ.get("GCP_PROJECT") or os.environ.get("GOOGLE_CLOUD_PROJECT")
+        location = os.environ.get("LLM_LOCATION", "global")
+        model = os.environ.get("LLM_MODEL", "gemini-3.5-flash")
+        if not model.startswith("google/"):
+            model = "google/" + model
+        return {
+            "provider": "vertex",
+            "model": model,
+            "base_url": os.environ.get("LLM_BASE_URL") or _vertex_base_url(project, location),
+            "api_key": None,  # ADC の OAuth トークンを build_openai_client() で解決
+            "project": project,
+            "location": location,
+        }
 
     if provider == "gemini":
         return {
@@ -54,6 +82,21 @@ def get_llm_config():
     }
 
 
+def _vertex_access_token() -> str:
+    """ADC（Application Default Credentials）から OAuth アクセストークンを取得する。
+
+    呼び出しごとにリフレッシュするため、長時間実行でもトークン失効に耐える。
+    """
+    import google.auth
+    import google.auth.transport.requests
+
+    credentials, _ = google.auth.default(
+        scopes=["https://www.googleapis.com/auth/cloud-platform"]
+    )
+    credentials.refresh(google.auth.transport.requests.Request())
+    return credentials.token
+
+
 def build_openai_client(fallback_api_key: str = None):
     """設定に基づき openai.OpenAI クライアントを構築する。
 
@@ -67,7 +110,11 @@ def build_openai_client(fallback_api_key: str = None):
 
     cfg = get_llm_config()
     kwargs = {}
-    api_key = cfg["api_key"] or fallback_api_key
+    if cfg["provider"] == "vertex":
+        # ADC の OAuth トークンを都度取得（api_key として渡す）
+        api_key = _vertex_access_token()
+    else:
+        api_key = cfg["api_key"] or fallback_api_key
     if api_key:
         kwargs["api_key"] = api_key
     if cfg["base_url"]:

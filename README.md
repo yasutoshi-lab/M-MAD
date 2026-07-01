@@ -46,7 +46,16 @@ cp .env.example .env
 # then edit .env
 ```
 
-- **Gemini (Google AI Studio, OpenAI-compatible endpoint)**:
+- **Vertex AI / Agent Platform (OpenAI-compatible endpoint, ADC OAuth)** — recommended for Google Cloud:
+  ```
+  LLM_PROVIDER=vertex
+  LLM_MODEL=gemini-3.5-flash          # google/ prefix is added automatically
+  GCP_PROJECT=your-gcp-project-id
+  LLM_LOCATION=global
+  ```
+  Run `gcloud auth application-default login` first (no API key needed). Uses
+  `base_url=https://aiplatform.googleapis.com/v1/projects/{project}/locations/{location}/endpoints/openapi`.
+- **Gemini (Google AI Studio, static API key)**:
   ```
   LLM_PROVIDER=gemini
   LLM_MODEL=gemini-3.5-flash
