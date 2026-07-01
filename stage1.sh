@@ -1,8 +1,8 @@
 set -e
 set -u
 
-# MAD_PATH=$(realpath `dirname $0`)
-MAD_PATH=M-MAD
+# スクリプト位置からリポジトリルートを解決（どのディレクトリから実行しても動く）
+MAD_PATH=$(cd "$(dirname "$0")" && pwd)
 system=$1
 lp=$2
 start=$3
