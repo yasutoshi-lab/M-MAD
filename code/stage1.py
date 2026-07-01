@@ -5,6 +5,7 @@ import random
 # random.seed(0)
 import argparse
 import importlib
+import traceback
 from langcodes import Language
 from utils.agent import Agent
 from datetime import datetime
@@ -458,5 +459,8 @@ if __name__ == "__main__":
             else:
                 debate.run()
                 debate.save_file_to_json(id+start_line-1)
-        except:
+        except Exception as e:
+            # 失敗サンプルを黙って欠落させず、ID と例外内容・トレースバックを記録して継続する。
+            print(f"[error] Failed to process sample {id+start_line-1}: {e}")
+            traceback.print_exc()
             continue
