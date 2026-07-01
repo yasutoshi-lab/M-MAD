@@ -14,6 +14,10 @@ dependencies = [
 ]
 
 [dependency-groups]
+# 開発用（テスト）。uv sync で既定導入され、`uv run pytest` で実行する。
+dev = [
+    "pytest",
+]
 # wmt23_metrics.ipynb（メタ評価）専用。通常の Stage1/Stage2&3 実行には不要。
 # 利用時は `uv sync --group eval` で導入する。
 eval = [
