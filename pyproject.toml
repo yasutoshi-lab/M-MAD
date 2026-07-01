@@ -1,0 +1,20 @@
+[project]
+name = "m-mad"
+version = "0.1.0"
+description = "Multidimensional Multi-Agent Debate for Advanced Machine Translation Evaluation"
+requires-python = "==3.10.*"
+dependencies = [
+    "openai==0.28.1", # コードは 0.28 系 API（openai.ChatCompletion / openai.error）を使用（Issue #1 は別途）
+    "backoff",
+    "langcodes",
+    "tiktoken",
+    "tqdm==4.66.1",
+]
+
+[dependency-groups]
+# wmt23_metrics.ipynb（メタ評価）専用。通常の Stage1/Stage2&3 実行には不要。
+# 利用時は `uv sync --group eval` で導入する。
+eval = [
+    "numpy",
+    "mt-metrics-eval @ git+https://github.com/google-research/mt-metrics-eval",
+]

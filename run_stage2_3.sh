@@ -1,1 +1,1 @@
-python code/stage2_3.py  synthetic_ref "zh-en" 0 1000
+uv run python code/stage2_3.py  synthetic_ref "zh-en" 0 1000
