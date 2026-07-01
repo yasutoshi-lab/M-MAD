@@ -17,12 +17,41 @@ judge_system_prompt = "You are a judge for the translation error annotations, gi
 judge_agent = "Regarding the translation pair \n\n##src_lng## source:\n##source_segment##\n##tgt_lng## translation:\n##target_segment##\n\nFrom previous annotations, we have the accuracy errors detection expert annotations: \n\n##accuracy_annotations##; the fluency errors detection expert annotations: \n\n##fluency_annotations##; the terminology errors detection expert annotations: \n\n##term_annotations##; and the style errors detection expert annotations: \n\n##style_annotations##.\n\nBased on the above information, output your analyses and the final annotations in JSON format as follows: {\"analysis\":(first, judge if it is non-translation error, if yes, explain responsibly why it is; if no, explain how do you use the rule when a single error_span contains multiple errors to output final annotations), \"annotations\":[{\"error_span\":(if non-translation error is selected, provide 'all'; otherwise, the error_span must be chosen from within the translated segment), \"category\":\"({category}/{subcategory} or non-translation)\", \"severity\":\"(minor or major)\", \"is_source_error\":\"(yes or no)\"},...]}"
 
 def set_meta_prompt(meta_prompt: str):
+    """メタプロンプトを system ロールのチャットメッセージ辞書に変換する。
+
+    Args:
+        meta_prompt (str): system として与える指示文。
+
+    Returns:
+        dict: {"role": "system", "content": ...} 形式のメッセージ。
+    """
     return {"role": "system", "content": f"{meta_prompt}"}
 
 def add_event(event: str):
+    """イベント文字列を user ロールのチャットメッセージ辞書に変換する。
+
+    Args:
+        event (str): user 発話として与える文字列。
+
+    Returns:
+        dict: {"role": "user", "content": ...} 形式のメッセージ。
+    """
     return {"role": "user", "content": f"{event}"}
 
 def construct_message(agents, idx):
+    """相手エージェントの回答を提示し再考を促す user メッセージを構築する。
+
+    討論の各ラウンドで、他エージェントの直近回答（agent[idx]）を引用として並べ、
+    severity は迷ったら minor に寄せる・non-translation は極力避ける等の指示と、
+    最終回答の JSON フォーマットを付したプロンプトを生成する。
+
+    Args:
+        agents (list): 相手エージェントのチャット履歴（context）のリスト。
+        idx (int): 各履歴から引用する回答のインデックス。
+
+    Returns:
+        dict: {"role": "user", "content": ...} 形式のメッセージ。
+    """
     prefix_string = "These are the annotations from the other agent:"
 
     for agent in agents:
@@ -36,14 +65,41 @@ def construct_message(agents, idx):
     return {"role": "user", "content": prefix_string}
 
 def ask_prompt(content):
+    """単一 user メッセージからなる messages リストを構築する。
+
+    Args:
+        content (str): user 発話の内容。
+
+    Returns:
+        list[dict]: [{"role": "user", "content": ...}]。
+    """
     return [{"role": "user", "content": content}]
 
 def construct_assistant_message(completion):
+    """ChatCompletion レスポンスから assistant メッセージ辞書を構築する。
+
+    Args:
+        completion: openai 1.x の ChatCompletion オブジェクト。
+
+    Returns:
+        dict: {"role": "assistant", "content": ...} 形式のメッセージ。
+    """
     content = completion.choices[0].message.content
     return {"role": "assistant", "content": content}
 
 
 def generate_answer(answer_context):
+    """設定（OpenAI / Gemini / Vertex）に基づき LLM へ問い合わせ応答を得る。
+
+    build_openai_client() で client とモデルを解決し、与えられたチャット履歴で
+    chat.completions を 1 件生成する。
+
+    Args:
+        answer_context (list[dict]): messages 形式のチャット履歴。
+
+    Returns:
+        ChatCompletion: LLM の応答オブジェクト。
+    """
     # プロバイダ設定（OpenAI / Gemini）から client と使用モデルを解決（呼び出し時に生成）。
     client, model = build_openai_client()
     completion = client.chat.completions.create(
@@ -53,15 +109,46 @@ def generate_answer(answer_context):
     return completion
 
 def isnull(content):
+    """アノテーション文字列が「空（エラー無し）」を表すかを判定する。
+
+    シングル/ダブルクォート・空白有無の 4 バリエーションの空 annotations を許容する。
+
+    Args:
+        content (str): 判定対象のアノテーション文字列。
+
+    Returns:
+        bool: 空アノテーションなら True。
+    """
     if content == '{"annotations": []}' or content == '{"annotations":[]}' or content == "{'annotations': []}" or content == "{'annotations':[]}":
         return True
     return False
 
 def is_only_double_quotes(text):
+    """テキストが引用符（" “ ”）のみで構成されるかを判定する。
+
+    原文・訳文が引用符だけの退化ケースを検出し、Judge をスキップするために使う。
+
+    Args:
+        text (str): 判定対象の文字列。
+
+    Returns:
+        bool: すべての文字が引用符種であれば True。
+    """
     double_quote_forms = {'"', '“', '”'}
     return all(char in double_quote_forms for char in text)
 
 def load_json_files(folder_path):
+    """フォルダ内の `{数値}_v1.json` を ID 昇順に読み込みリストで返す。
+
+    ファイル名が数値 ID の JSON のみを対象にソートして読み込む。読み込みに失敗した
+    要素は None として位置を保持する（インデックス＝サンプル ID の対応を維持）。
+
+    Args:
+        folder_path (str): Stage1 出力ディレクトリのパス。
+
+    Returns:
+        list: 各サンプルの JSON（dict）または None のリスト。
+    """
     json_data = []
     
     files = os.listdir(folder_path)
@@ -82,6 +169,17 @@ def load_json_files(folder_path):
     return json_data
 
 def extract_annotations(content):
+    """LLM 出力から annotations 配列を正規表現で抽出し dict として返す。
+
+    `"annotations": [...]` に一致する最後のマッチを JSON として解釈する。JSON デコードに
+    失敗した場合や一致が無い場合は空アノテーション相当を返す（後段の統合が壊れないように）。
+
+    Args:
+        content (str): LLM の生出力。
+
+    Returns:
+        dict | None: {"annotations": [...]}。一致が無い場合は None。
+    """
     print("content: ", content)
 
     # pattern = r'\{\s*"annotations"\s*:\s*\[(.*?)\]\s*\}'
@@ -247,6 +345,16 @@ def process_sample(sample, source_lang, target_lang):
 
 
 def main():
+    """Stage2&3 のエントリポイント。引数解析→入力ロード→サンプル毎処理→出力を行う。
+
+    CLI 引数（system / lp / starting / ending）を解析し、Stage1 出力
+    （data/output_{lp}_{system}_v1）を読み込む。starting..ending の各サンプルを
+    process_sample で処理し、結果を data/stage2_3_{lp}_{system}/{i}_v1.json に書き出す。
+    既存の非空出力はスキップし、annotated=="no"（"None"）のサンプルは空ファイルを残す。
+
+    Returns:
+        None
+    """
     args = parse_args()
     system, lp, starting, ending = args.system, args.lp, args.starting, args.ending
     source_lang, target_lang = get_language_names(lp)

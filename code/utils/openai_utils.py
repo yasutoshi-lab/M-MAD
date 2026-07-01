@@ -15,26 +15,58 @@ model2max_context = {
 }
 
 class OutOfQuotaException(Exception):
-    "Raised when the key exceeded the current quota"
+    """API キーがクォータ超過したときに送出される例外。
+
+    Attributes:
+        key (str): クォータ超過した API キー。
+        cause: 元となった例外（任意）。
+    """
     def __init__(self, key, cause=None):
+        """クォータ超過メッセージを組み立てて例外を初期化する。
+
+        Args:
+            key (str): クォータ超過した API キー。
+            cause (optional): 元となった例外。
+        """
         super().__init__(f"No quota for key: {key}")
         self.key = key
         self.cause = cause
 
     def __str__(self):
+        """例外の文字列表現を返す（cause があれば併記する）。
+
+        Returns:
+            str: エラーメッセージ。
+        """
         if self.cause:
             return f"{super().__str__()}. Caused by {self.cause}"
         else:
             return super().__str__()
 
 class AccessTerminatedException(Exception):
-    "Raised when the key has been terminated"
+    """API キーが利用停止されたときに送出される例外。
+
+    Attributes:
+        key (str): 利用停止された API キー。
+        cause: 元となった例外（任意）。
+    """
     def __init__(self, key, cause=None):
+        """利用停止メッセージを組み立てて例外を初期化する。
+
+        Args:
+            key (str): 利用停止された API キー。
+            cause (optional): 元となった例外。
+        """
         super().__init__(f"Access terminated key: {key}")
         self.key = key
         self.cause = cause
 
     def __str__(self):
+        """例外の文字列表現を返す（cause があれば併記する）。
+
+        Returns:
+            str: エラーメッセージ。
+        """
         if self.cause:
             return f"{super().__str__()}. Caused by {self.cause}"
         else:
