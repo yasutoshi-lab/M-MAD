@@ -4,10 +4,9 @@ import time
 import random
 from openai import OpenAI, RateLimitError, APIError, APIConnectionError, InternalServerError, APITimeoutError
 from .openai_utils import OutOfQuotaException, AccessTerminatedException
-from .openai_utils import num_tokens_from_string, model2max_context
 from .config import build_openai_client
 
-support_models = ['gpt-3.5-turbo', 'gpt-3.5-turbo-0301', 'gpt-4o-mini', 'qwen2.5-72b-instruct', 'Llama-3.1-70B-lnstruct', 'gemini-3.5-flash', 'google/gemini-3.5-flash']
+support_models = ['gpt-3.5-turbo', 'gpt-3.5-turbo-0301', 'gpt-4o-mini', 'qwen2.5-72b-instruct', 'Llama-3.1-70B-Instruct', 'gemini-3.5-flash', 'google/gemini-3.5-flash']
 
 class Agent:
     def __init__(self, model_name: str, name: str, temperature: float, sleep_time: float=0) -> None:
@@ -26,12 +25,11 @@ class Agent:
         self.sleep_time = sleep_time
 
     @backoff.on_exception(backoff.expo, (RateLimitError, APIError, APIConnectionError, InternalServerError, APITimeoutError), max_tries=20)
-    def query(self, messages: "list[dict]", max_tokens: int, api_key: str, temperature: float) -> str:
+    def query(self, messages: "list[dict]", api_key: str, temperature: float) -> str:
         """make a query
 
         Args:
             messages (list[dict]): chat history in turbo format
-            max_tokens (int): max token in api call
             api_key (str): openai api key
             temperature (float): sampling temperature
 
@@ -51,7 +49,7 @@ class Agent:
                 model=model,
                 messages=messages,
                 temperature=temperature,
-                max_tokens=1000,
+                max_tokens=1000,  # 応答トークン上限（出力長の固定キャップ）
             )
             gen = response.choices[0].message.content
             return gen
@@ -95,10 +93,6 @@ class Agent:
 
         Args:
         """
-        # query
-        num_context_token = sum([num_tokens_from_string(m["content"], self.model_name) for m in self.memory_lst])
-        max_token = model2max_context.get(self.model_name, 16384) - num_context_token
         print(self.memory_lst)
-
-        return self.query(self.memory_lst, max_token, api_key=self.openai_api_key, temperature=temperature if temperature else self.temperature)
+        return self.query(self.memory_lst, api_key=self.openai_api_key, temperature=temperature if temperature else self.temperature)
 
