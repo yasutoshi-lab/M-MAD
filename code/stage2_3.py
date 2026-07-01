@@ -1,23 +1,20 @@
 import json
 import time
 import random
-import sys
 import os
 import re
+import argparse
 from langcodes import Language
 from utils.config import build_openai_client
 
-system = sys.argv[1]
-lp = sys.argv[2]
-starting = int(sys.argv[3])
-ending = int(sys.argv[4])
+NUM_AGENTS = 2
+MAX_ROUNDS = 4
+MQM_AGENTS = ["Accuracy", "Fluency", "Terminology", "Style"]
 
 
 judge_system_prompt = "You are a judge for the translation error annotations, given the translation pair and annotations from previous rounds. Your task is to integrate them and remove repeated annotations if any, where if a single error_span contains multiple errors, indicate only the one that is the most severe, and if some errors have the same severity, choose the first matching category listed in the error typology (accuracy, then fluency, then terminology, then style). But please note this rule is only applied when a single error_span contains multiple errors. However, if it is not possible to reliably identify distinct errors because the translation is too badly garbled or is unrelated to the source, then mark a special category, called non-translation, that spans the entire segment. There can be at most one non-translation error per segment, and it should span the entire segment. No other errors should be identified if non-translation is selected."
 
 judge_agent = "Regarding the translation pair \n\n##src_lng## source:\n##source_segment##\n##tgt_lng## translation:\n##target_segment##\n\nFrom previous annotations, we have the accuracy errors detection expert annotations: \n\n##accuracy_annotations##; the fluency errors detection expert annotations: \n\n##fluency_annotations##; the terminology errors detection expert annotations: \n\n##term_annotations##; and the style errors detection expert annotations: \n\n##style_annotations##.\n\nBased on the above information, output your analyses and the final annotations in JSON format as follows: {\"analysis\":(first, judge if it is non-translation error, if yes, explain responsibly why it is; if no, explain how do you use the rule when a single error_span contains multiple errors to output final annotations), \"annotations\":[{\"error_span\":(if non-translation error is selected, provide 'all'; otherwise, the error_span must be chosen from within the translated segment), \"category\":\"({category}/{subcategory} or non-translation)\", \"severity\":\"(minor or major)\", \"is_source_error\":\"(yes or no)\"},...]}"
-
-# judge_agent = "Regarding the translation pair, from previous annotations, we have the accuracy errors detection expert annotations: \n\n##accuracy_annotations##; the fluency errors detection expert annotations: \n\n##fluency_annotations##; the terminology errors detection expert annotations: \n\n##term_annotations##; and the style errors detection expert annotations: \n\n##style_annotations##.\n\nBased on the above information, output your analyses and the final annotations in JSON format as follows: {\"analysis\":(first, judge if it is non-translation error, if yes, explain responsibly why it is; if no, explain how do you use the rule when a single error_span contains multiple errors to output final annotations), \"annotations\":[{\"error_span\":(if non-translation error is selected, provide 'all'; otherwise, the error_span must be chosen from within the translated segment), \"category\":\"({category}/{subcategory} or non-translation)\", \"severity\":\"(minor or major)\", \"is_source_error\":\"(yes or no)\"},...]}"
 
 def set_meta_prompt(meta_prompt: str):
     return {"role": "system", "content": f"{meta_prompt}"}
@@ -126,16 +123,133 @@ user_prompt = """
 judge_prompt = "Compare the error annotations provided by two agents for the same machine-translated segment. Determine if the annotations are essentially consistent. The first agent annotations are: {first_annotations}; the other agent annotations are: {second_annotations}. Return \"yes\" if they are consistent, or \"no\" if they are inconsistent. Provide no additional output."
 
 
-# 言語ペア（CLI 引数 lp）から言語名を導出する。stage1.py と同じ方式に統一。
-src_code, tgt_code = lp.split("-")
-source_lang = Language.make(language=src_code).display_name()
-target_lang = Language.make(language=tgt_code).display_name()
+# run_dimension_debate が「合意に至らず未設定」を表す番兵（元コードの
+# response_dict[dim] 未設定＝後段 KeyError の挙動を保持するため）。
+_NO_RESULT = object()
 
 
-if __name__ == "__main__":
-    agents = 2
-    max_rounds = 4
-    mqm_agents = ["Accuracy", "Fluency", "Terminology", "Style"]
+def parse_args():
+    """CLI 引数（system / lp / starting / ending）をパースする。"""
+    parser = argparse.ArgumentParser()
+    parser.add_argument("system", type=str, help="MT system name")
+    parser.add_argument("lp", type=str, help="Language pair (e.g. zh-en)")
+    parser.add_argument("starting", type=int, help="Start sample index")
+    parser.add_argument("ending", type=int, help="End sample index (2000 = all)")
+    return parser.parse_args()
+
+
+def get_language_names(lang_pair):
+    """言語ペア（例 zh-en）から src/tgt の表示名を返す（stage1 と同方式）。"""
+    src_code, tgt_code = lang_pair.split("-")
+    return (
+        Language.make(language=src_code).display_name(),
+        Language.make(language=tgt_code).display_name(),
+    )
+
+
+def run_dimension_debate(mqm_agent_index, annotation, source_seg, target_seg, source_lang, target_lang):
+    """1 つの MQM 次元について反対意見を立てて討論し、合意アノテーションを返す。
+
+    合意（judge が yes/no）に至らなかった場合は `_NO_RESULT` を返す（元コードの
+    response_dict[dim] 未設定＝後段 KeyError の挙動を保持するため）。
+    """
+    if "non-translation" in annotation:
+        other_annotation = "I do not think it meets the criteria of being too badly garbled or entirely unrelated to the source, so it cannot be counted as a non-translation error."
+    else:
+        other_annotation = annotation.replace("major", "minor")
+    content = [annotation, other_annotation]
+
+    if annotation == other_annotation:
+        return annotation
+
+    agent_contexts = [[{"role": "system", "content": system_prompts[mqm_agent_index]},
+                    {"role": "user", "content": user_prompt.format(src_lng=source_lang, tgt_lng=target_lang, source_segment=source_seg, target_segment=target_seg)}]
+                    for agent in range(NUM_AGENTS)]
+
+    judge_ans = ""
+    for round in range(MAX_ROUNDS):
+        for j, agent_context in enumerate(agent_contexts):
+
+            if round == 0:
+                assistant_message = {"role": "assistant", "content": content[j]}
+                agent_context.append(assistant_message)
+            else:
+                agent_contexts_other = agent_contexts[:j] + agent_contexts[j+1:]
+                message = construct_message(agent_contexts_other, 2 * round)
+                agent_context.append(message)
+                try:
+                    completion = generate_answer(agent_context)
+                except:
+                    completion = generate_answer(agent_context)
+                assistant_message = construct_assistant_message(completion)
+                agent_context.append(assistant_message)
+
+        if round != 0:
+            print(agent_contexts[0][-1]['content'])
+            print(agent_contexts[1][-1]['content'])
+            annotation1 = extract_annotations(agent_contexts[0][-1]['content'])
+            annotation2 = extract_annotations(agent_contexts[1][-1]['content'])
+            print("annotation1: ", agent_contexts[0][-1]['content'], "\n", annotation1)
+            print("annotation2: ", agent_contexts[1][-1]['content'], "\n",annotation2)
+
+            try:
+                judge_response = generate_answer(ask_prompt(judge_prompt.format(first_annotations = annotation1, second_annotations = annotation2)))
+            except:
+                judge_response = generate_answer(ask_prompt(judge_prompt.format(first_annotations = annotation1, second_annotations = annotation2)))
+            judge_ans = judge_response.choices[0].message.content
+
+            if "yes" in judge_ans:
+                return extract_annotations(agent_contexts[0][-1]['content'])
+
+    if "no" in judge_ans:
+        return extract_annotations(agent_contexts[0][-1]['content'])
+    return _NO_RESULT
+
+
+def run_final_judge(response_dict, source_seg, target_seg, source_lang, target_lang):
+    """4 次元の合意結果を統合 Judge に渡し、最終 MQM アノテーション(JSON)を返す。"""
+    system_prompt = set_meta_prompt(judge_system_prompt)
+    use_prompt = add_event(judge_agent.replace("##src_lng##", source_lang).replace("##tgt_lng##", target_lang).replace("##source_segment##", source_seg).replace("##target_segment##", target_seg).replace('##accuracy_annotations##', str(response_dict[MQM_AGENTS[0]])).replace('##fluency_annotations##', str(response_dict[MQM_AGENTS[1]])).replace('##term_annotations##', str(response_dict[MQM_AGENTS[2]])).replace('##style_annotations##', str(response_dict[MQM_AGENTS[3]])))
+
+    print("judge user prompt\n", use_prompt)
+
+    if isnull(response_dict[MQM_AGENTS[0]]) and isnull(response_dict[MQM_AGENTS[1]]) and isnull(response_dict[MQM_AGENTS[2]]) and isnull(response_dict[MQM_AGENTS[3]]):
+        response = '{"annotations":[]}'
+    elif is_only_double_quotes(source_seg) and is_only_double_quotes(target_seg):
+        response = '{"annotations":[]}'
+    else:
+        try:
+            response = generate_answer([system_prompt, use_prompt]).choices[0].message.content
+        except:
+            response = generate_answer([system_prompt, use_prompt]).choices[0].message.content
+    print("response", response)
+    return extract_annotations(response)
+
+
+def process_sample(sample, source_lang, target_lang):
+    """Stage1 出力 1 件から討論＋最終判定を行い response_dict を返す。"""
+    # サンプルごとに初期化し、前サンプルの値が最終 Judge に混入しないようにする。
+    response_dict = {}
+    source_seg = sample["source_segment"]
+    target_seg = sample["target_segment"]
+    print("source: ", source_seg)
+    print("target: ", target_seg)
+    response_dict["source"] = source_seg
+    response_dict["target"] = target_seg
+    for mqm_agent_index in range(len(MQM_AGENTS)):
+        annotation = sample["players"][MQM_AGENTS[mqm_agent_index]+" Agent"][-1]["content"]
+        result = run_dimension_debate(mqm_agent_index, annotation, source_seg, target_seg, source_lang, target_lang)
+        if result is not _NO_RESULT:
+            response_dict[MQM_AGENTS[mqm_agent_index]] = result
+
+    response_dict["judge"] = run_final_judge(response_dict, source_seg, target_seg, source_lang, target_lang)
+    return response_dict
+
+
+def main():
+    args = parse_args()
+    system, lp, starting, ending = args.system, args.lp, args.starting, args.ending
+    source_lang, target_lang = get_language_names(lp)
 
     # リポジトリルートをスクリプト位置から解決（実行ディレクトリに依存しない）。
     MAD_PATH = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -154,93 +268,15 @@ if __name__ == "__main__":
         ending = n
     for i in range(starting, ending):
         print(f"-------------------The {i}th sample:---------------------")
-        # サンプルごとに初期化し、前サンプルの値が最終 Judge に混入しないようにする。
-        response_dict = {}
-        if os.path.exists(f"{folder_path}/{i}_v1.json") and os.path.getsize(f"{folder_path}/{i}_v1.json") > 0:
+        out_path = os.path.join(folder_path, f"{i}_v1.json")
+        if os.path.exists(out_path) and os.path.getsize(out_path) > 0:
             continue
-        with open(f"{folder_path}/{i}_v1.json", "w", encoding='utf-8') as f:
+        with open(out_path, "w", encoding='utf-8') as f:
             if all_json_data[i] == "None":
                 continue
-            source_seg = all_json_data[i]["source_segment"]
-            target_seg = all_json_data[i]["target_segment"]
-            print("source: ", source_seg)
-            print("target: ", target_seg)
-            response_dict["source"] = source_seg
-            response_dict["target"] = target_seg
-            agent_contexts = []
-            for mqm_agent_index in range(len(mqm_agents)):
-                annotation = all_json_data[i]["players"][mqm_agents[mqm_agent_index]+" Agent"][-1]["content"]
-
-                if "non-translation" in annotation:
-                    other_annotation = "I do not think it meets the criteria of being too badly garbled or entirely unrelated to the source, so it cannot be counted as a non-translation error."
-                else:
-                    other_annotation = annotation.replace("major", "minor")
-                content = [annotation, other_annotation]
-                
-                if annotation == other_annotation:
-                    response_dict[mqm_agents[mqm_agent_index]] = annotation
-                    continue
-
-                agent_contexts = [[{"role": "system", "content": system_prompts[mqm_agent_index]}, 
-                                {"role": "user", "content": user_prompt.format(src_lng=source_lang, tgt_lng=target_lang, source_segment=source_seg, target_segment=target_seg)}]
-                                for agent in range(agents)]
-
-                for round in range(max_rounds):
-                    for j, agent_context in enumerate(agent_contexts):
-                        
-                        if round == 0:
-                            assistant_message = {"role": "assistant", "content": content[j]}
-                            agent_context.append(assistant_message)
-                        else:
-                            agent_contexts_other = agent_contexts[:j] + agent_contexts[j+1:]
-                            message = construct_message(agent_contexts_other, 2 * round)
-                            agent_context.append(message)
-                            try:
-                                completion = generate_answer(agent_context)
-                            except:
-                                completion = generate_answer(agent_context)
-                            assistant_message = construct_assistant_message(completion)
-                            agent_context.append(assistant_message)
-
-                    if round != 0:
-                        print(agent_contexts[0][-1]['content'])
-                        print(agent_contexts[1][-1]['content'])
-                        annotation1 = extract_annotations(agent_contexts[0][-1]['content'])
-                        annotation2 = extract_annotations(agent_contexts[1][-1]['content'])
-                        print("annotation1: ", agent_contexts[0][-1]['content'], "\n", annotation1)
-                        print("annotation2: ", agent_contexts[1][-1]['content'], "\n",annotation2)
-
-                        try:
-                            judge_response = generate_answer(ask_prompt(judge_prompt.format(first_annotations = annotation1, second_annotations = annotation2)))
-                        except:
-                            judge_response = generate_answer(ask_prompt(judge_prompt.format(first_annotations = annotation1, second_annotations = annotation2)))
-                        judge_ans = judge_response.choices[0].message.content
-
-                        if "yes" in judge_ans:
-                            response_dict[mqm_agents[mqm_agent_index]] = extract_annotations(agent_contexts[0][-1]['content'])
-                            break
-                            
-                if "no" in judge_ans:
-                    response_dict[mqm_agents[mqm_agent_index]] = extract_annotations(agent_contexts[0][-1]['content'])
-
-
-            system_prompt = set_meta_prompt(judge_system_prompt)
-            use_prompt = add_event(judge_agent.replace("##src_lng##", source_lang).replace("##tgt_lng##", target_lang).replace("##source_segment##", source_seg).replace("##target_segment##", target_seg).replace('##accuracy_annotations##', str(response_dict[mqm_agents[0]])).replace('##fluency_annotations##', str(response_dict[mqm_agents[1]])).replace('##term_annotations##', str(response_dict[mqm_agents[2]])).replace('##style_annotations##', str(response_dict[mqm_agents[3]])))
-
-            print("judge user prompt\n", use_prompt)
-
-            if isnull(response_dict[mqm_agents[0]]) and isnull(response_dict[mqm_agents[1]]) and isnull(response_dict[mqm_agents[2]]) and isnull(response_dict[mqm_agents[3]]):
-                response = '{"annotations":[]}'
-            elif is_only_double_quotes(source_seg) and is_only_double_quotes(target_seg):
-                response = '{"annotations":[]}'
-            else:
-                try:
-                    response = generate_answer([system_prompt, use_prompt]).choices[0].message.content
-                except:
-                    response = generate_answer([system_prompt, use_prompt]).choices[0].message.content
-            print("response", response)
-            response = extract_annotations(response)
-            response_dict["judge"] = response
-
-
+            response_dict = process_sample(all_json_data[i], source_lang, target_lang)
             json.dump(response_dict, f, ensure_ascii=False, indent=4)
+
+
+if __name__ == "__main__":
+    main()
