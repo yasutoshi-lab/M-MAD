@@ -1,0 +1,29 @@
+name: CI
+
+# main への push と main 向け PR でテストを実行する。
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python 3.10
+        run: uv python install 3.10
+
+      - name: Install dependencies (default groups; eval group は除外)
+        run: uv sync
+
+      - name: Run unit tests
+        run: uv run pytest tests/ -q
