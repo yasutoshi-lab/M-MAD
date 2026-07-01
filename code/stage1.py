@@ -95,7 +95,6 @@ class Debate:
     def __init__(self,
             model_name: str='gpt-4o-mini',
             temperature: float=0,
-            num_players: int=5,
             save_file_dir: str=None,
             openai_api_key: str=None,
             prompts_path: str=None,
@@ -106,7 +105,8 @@ class Debate:
 
         self.model_name = model_name
         self.temperature = temperature
-        self.num_players = num_players
+        # プレイヤー数は NAME_LIST（4 次元エージェント + Judge）で固定。
+        self.num_players = len(NAME_LIST)
         self.save_file_dir = save_file_dir
         self.openai_api_key = openai_api_key
         self.max_round = max_round
@@ -121,7 +121,7 @@ class Debate:
             'end_time': '',
             'model_name': model_name,
             'temperature': temperature,
-            'num_players': num_players,
+            'num_players': len(NAME_LIST),
             'success': False,
             "src_lng": "",
             "tgt_lng": "",
@@ -387,7 +387,7 @@ if __name__ == "__main__":
             with open(prompts_path, 'w') as file:
                 json.dump(config, file, ensure_ascii=False, indent=4)
                 
-            debate = Debate(save_file_dir=save_file_dir, num_players=4, openai_api_key=openai_api_key, prompts_path=prompts_path, temperature=0, sleep_time=0, few_shots=few_shots)
+            debate = Debate(save_file_dir=save_file_dir, openai_api_key=openai_api_key, prompts_path=prompts_path, temperature=0, sleep_time=0, few_shots=few_shots)
             if annotated == "no":
                 debate.save_file_to_json_without_annoatation(id+start_line-1)
             else:
