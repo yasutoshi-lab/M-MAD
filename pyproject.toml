@@ -14,9 +14,11 @@ dependencies = [
 ]
 
 [dependency-groups]
-# 開発用（テスト）。uv sync で既定導入され、`uv run pytest` で実行する。
+# 開発用（テスト・lint）。uv sync で既定導入され、`uv run pytest` / `uv run ruff` で実行する。
 dev = [
     "pytest",
+    "ruff",
+    "pre-commit",
 ]
 # wmt23_metrics.ipynb（メタ評価）専用。通常の Stage1/Stage2&3 実行には不要。
 # 利用時は `uv sync --group eval` で導入する。
@@ -24,3 +26,11 @@ eval = [
     "numpy",
     "mt-metrics-eval @ git+https://github.com/google-research/mt-metrics-eval",
 ]
+
+[tool.ruff]
+target-version = "py310"
+
+[tool.ruff.lint]
+# 実バグ寄りの既定ルール（pyflakes + pycodestyle E4/E7/E9）を明示。
+# 行長 E501 は含めない（プロンプト長文字列によるノイズを避けるため）。
+select = ["E4", "E7", "E9", "F"]

@@ -37,6 +37,16 @@ uv sync --group eval    # additionally install meta-evaluation deps (numpy, mt-m
 
 Run any command inside the environment with `uv run` (e.g. `uv run python code/stage1.py --help`).
 
+#### Tests / Lint
+
+```bash
+uv run pytest tests/ -q     # unit tests
+uv run ruff check code tests  # lint (ruff)
+uv run pre-commit install   # (optional) enable local pre-commit ruff hook
+```
+
+Tests and lint also run automatically in CI (GitHub Actions) on push / PR to `main`.
+
 #### LLM provider (OpenAI or Gemini)
 
 The LLM backend is selected via environment variables (loaded automatically from a `.env` file at the repo root; see `.env.example`).

@@ -25,5 +25,8 @@ jobs:
       - name: Install dependencies (default groups; eval group は除外)
         run: uv sync
 
+      - name: Lint (ruff)
+        run: uv run ruff check code tests
+
       - name: Run unit tests
         run: uv run pytest tests/ -q
