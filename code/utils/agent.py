@@ -9,6 +9,20 @@ from .config import build_openai_client
 support_models = ['gpt-3.5-turbo', 'gpt-3.5-turbo-0301', 'gpt-4o-mini', 'qwen2.5-72b-instruct', 'Llama-3.1-70B-Instruct', 'gemini-3.5-flash', 'google/gemini-3.5-flash']
 
 class Agent:
+    """LLM とのチャット履歴を保持し、問い合わせを行う基底エージェント。
+
+    memory_lst に system / user / assistant ロールの履歴を積み、set_meta_prompt /
+    add_event / add_memory で構築して ask()（内部で query()）が LLM を呼ぶ。API 呼び出しは
+    backoff により RateLimit/APIError 等を指数バックオフでリトライする。
+
+    Attributes:
+        model_name (str): 使用モデル名。
+        name (str): エージェント名（履歴表示・save_file のキーに使用）。
+        temperature (float): サンプリング温度。
+        memory_lst (list[dict]): チャット履歴（role/content の辞書のリスト）。
+        sleep_time (float): レート制限対策のスリープ秒。
+    """
+
     def __init__(self, model_name: str, name: str, temperature: float, sleep_time: float=0) -> None:
         """Create an agent
 

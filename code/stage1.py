@@ -59,6 +59,17 @@ def load_few_shots(lang_pair: str):
     return importlib.import_module(module_name)
 
 def extract_json(text):
+    """テキストから最初の '{' と最後の '}' に挟まれた部分文字列を切り出す。
+
+    LLM 応答に前後の説明文やコードフェンスが含まれても、JSON 本体らしき範囲を
+    大まかに抽出するための簡易処理。抽出結果の妥当性は呼び出し側でパースして確認する。
+
+    Args:
+        text (str): LLM の生出力。
+
+    Returns:
+        str: 最初の '{' から最後の '}' までの部分文字列（見つからなければ空に近い文字列）。
+    """
     brace_open = text.find("{")
     brace_close = text.rfind("}")
     return text[brace_open:brace_close+1]
@@ -86,12 +97,47 @@ def parse_json_obj(text):
 
 
 class DebatePlayer(Agent):
+    """討論に参加する 1 エージェント。Agent に OpenAI API キーを付与した派生クラス。
+
+    Agent のチャット履歴管理・LLM 呼び出し機能を継承し、API キーを保持する点のみ拡張する。
+
+    Attributes:
+        openai_api_key (str): この player が LLM 呼び出しに使う API キー（フォールバック用）。
+    """
+
     def __init__(self, model_name: str, name: str, temperature:float, openai_api_key: str, sleep_time: float) -> None:
+        """DebatePlayer を初期化し、Agent の初期化に加えて API キーを保持する。
+
+        Args:
+            model_name (str): 使用モデル名。
+            name (str): エージェント名。
+            temperature (float): サンプリング温度。
+            openai_api_key (str): LLM 呼び出しに使う API キー（フォールバック用）。
+            sleep_time (float): レート制限対策のスリープ秒。
+        """
         super(DebatePlayer, self).__init__(model_name, name, temperature, sleep_time)
         self.openai_api_key = openai_api_key
 
 
 class Debate:
+    """Stage1（次元分解・独立アノテーション）の 1 サンプル分の討論を統括する。
+
+    4 次元エージェント（Accuracy / Fluency / Terminology / Style）と Judge を生成し、
+    few-shot 注入・各次元の独立アノテーション・Judge 統合を実行して、最終 MQM
+    アノテーションと全プレイヤーの履歴を save_file に蓄積する。
+
+    Attributes:
+        model_name (str): 使用モデル名。
+        temperature (float): サンプリング温度。
+        num_players (int): プレイヤー数（NAME_LIST 由来で固定＝4 次元 + Judge）。
+        save_file_dir (str): 出力 JSON の保存先ディレクトリ。
+        openai_api_key (str): 各エージェントに渡す API キー（フォールバック用）。
+        max_round (int): 討論の最大ラウンド数。
+        sleep_time (float): レート制限対策のスリープ秒。
+        few_shots: 言語ペアに対応する few-shot デモモジュール。
+        save_file (dict): 実行メタ情報・各次元/最終アノテーション・プレイヤー履歴を保持する辞書。
+    """
+
     def __init__(self,
             model_name: str='gpt-4o-mini',
             temperature: float=0,
@@ -102,7 +148,18 @@ class Debate:
             sleep_time: float=0,
             few_shots=None
         ) -> None:
+        """Debate を初期化し、プロンプト読込・エージェント生成・独立アノテーションまで実行する。
 
+        Args:
+            model_name (str, optional): モデル名。デフォルト 'gpt-4o-mini'。
+            temperature (float, optional): サンプリング温度。デフォルト 0。
+            save_file_dir (str, optional): 出力保存先ディレクトリ。
+            openai_api_key (str, optional): API キー（フォールバック用）。
+            prompts_path (str, optional): プロンプトテンプレート JSON のパス。
+            max_round (int, optional): 最大討論ラウンド数。デフォルト 3。
+            sleep_time (float, optional): スリープ秒。デフォルト 0。
+            few_shots (optional): few-shot デモモジュール（load_few_shots の戻り値）。
+        """
         self.model_name = model_name
         self.temperature = temperature
         # プレイヤー数は NAME_LIST（4 次元エージェント + Judge）で固定。
@@ -146,7 +203,16 @@ class Debate:
 
 
     def init_prompt(self):
+        """各エージェントのプロンプト内プレースホルダを実際の言語・原文/訳文で置換する。
+
+        `##src_lng##` / `##tgt_lng##` / `##source_segment##` / `##target_segment##` を
+        save_file の対応値で埋め、4 次元エージェントと Judge のプロンプトを完成させる。
+
+        Returns:
+            None
+        """
         def prompt_replace(key):
+            """save_file[key] 内の 4 種プレースホルダを実値で置換する。"""
             self.save_file[key] = self.save_file[key].replace("##src_lng##", self.save_file["src_lng"]).replace("##tgt_lng##", self.save_file["tgt_lng"]).replace("##source_segment##", self.save_file["source_segment"]).replace("##target_segment##", self.save_file["target_segment"])
         prompt_replace("accuracy_agent")
         prompt_replace("fluency_agent")
@@ -155,9 +221,21 @@ class Debate:
         prompt_replace("judge_agent")
 
     def create_base(self):
+        """評価タスク開始のバナーを標準出力に表示する。
+
+        Returns:
+            None
+        """
         print(f"\n===== Translation Eval Task =====\n")
 
     def create_agents(self):
+        """NAME_LIST に基づき 5 プレイヤー（4 次元エージェント + Judge）を生成する。
+
+        生成した player を self.players に格納し、次元別・Judge の参照属性にも割り当てる。
+
+        Returns:
+            None
+        """
         self.players = [
             DebatePlayer(model_name=self.model_name, name=name, temperature=self.temperature, openai_api_key=self.openai_api_key, sleep_time=self.sleep_time) for name in NAME_LIST
         ]
@@ -201,6 +279,15 @@ class Debate:
         return annotations
 
     def init_agents(self):
+        """メタプロンプト設定・few-shot 注入・各次元の独立アノテーション・Judge 統合を実行する。
+
+        4 次元エージェントに base_system_prompt を、Judge に judge_system_prompt を設定し、
+        言語ペア別の few-shot を注入して各次元の注釈を取得（_eval_dimension）。最後に 4 次元の
+        結果を Judge に渡して最終 MQM アノテーション（self.judge_ans）を生成する。
+
+        Returns:
+            None
+        """
         # 言語ペアに応じて選択された few-shot デモをローカルに束ねる（以降の参照はそのまま）。
         fs = self.few_shots
         accuracy_user_shot, accuracy_mem_shot = fs.accuracy_user_shot, fs.accuracy_mem_shot
@@ -258,16 +345,32 @@ class Debate:
             self.judge.add_memory(self.judge_ans)
 
     def save_file_to_json(self, id):
+        """save_file を `{id}_v1.json` として出力ディレクトリに書き出す。
+
+        Args:
+            id (int): 出力ファイル名に使うサンプル ID。
+
+        Returns:
+            None
+        """
         now = datetime.now()
         current_time = now.strftime("%Y-%m-%d_%H:%M:%S")
         save_file_path = os.path.join(self.save_file_dir, f"{id}_v1.json")
-        
+
         self.save_file['end_time'] = current_time
         json_str = json.dumps(self.save_file, ensure_ascii=False, indent=4)
         with open(save_file_path, 'w') as f:
             f.write(json_str)
-    
+
     def save_file_to_json_without_annotation(self, id):
+        """アノテーション対象外（annotated == "no"）のサンプルとして "None" を書き出す。
+
+        Args:
+            id (int): 出力ファイル名に使うサンプル ID。
+
+        Returns:
+            None
+        """
         save_file_path = os.path.join(self.save_file_dir, f"{id}_v1.json")
         json_str = json.dumps("None")
         with open(save_file_path, 'w') as f:
@@ -276,6 +379,14 @@ class Debate:
 
 
     def run(self):
+        """Judge の最終結果を save_file に統合し、成功フラグと全プレイヤー履歴を確定する。
+
+        self.judge_ans（最終アノテーション）を save_file にマージし、success を True に設定、
+        各プレイヤーのチャット履歴を save_file['players'] に格納する。
+
+        Returns:
+            None
+        """
         self.save_file.update(self.judge_ans)
         self.save_file['success'] = True
 
@@ -284,6 +395,12 @@ class Debate:
 
 
 def parse_args():
+    """Stage1 の CLI 引数を解析して返す。
+
+    Returns:
+        argparse.Namespace: input_file / output_dir / lang_pair / api_key /
+            model_name / temperature / start_line を持つ引数オブジェクト。
+    """
     parser = argparse.ArgumentParser("", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     parser.add_argument("-i", "--input-file", type=str, required=True, help="Input file path")
