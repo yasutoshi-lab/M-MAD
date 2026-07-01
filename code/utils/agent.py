@@ -3,7 +3,7 @@ from openai import RateLimitError, APIError, APIConnectionError, InternalServerE
 from .openai_utils import OutOfQuotaException, AccessTerminatedException
 from .config import build_openai_client
 
-support_models = ['gpt-3.5-turbo', 'gpt-3.5-turbo-0301', 'gpt-4o-mini', 'qwen2.5-72b-instruct', 'Llama-3.1-70B-Instruct', 'gemini-3.5-flash', 'google/gemini-3.5-flash']
+support_models = ['gpt-3.5-turbo', 'gpt-3.5-turbo-0301', 'gpt-4o-mini', 'qwen2.5-72b-instruct', 'Llama-3.1-70B-Instruct', 'gemini-3.5-flash', 'google/gemini-3.5-flash', 'claude-haiku-4-5']
 
 class Agent:
     """LLM とのチャット履歴を保持し、問い合わせを行う基底エージェント。

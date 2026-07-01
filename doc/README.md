@@ -28,6 +28,7 @@ M-MAD は OpenAI 互換の Chat Completions API 経由で LLM を呼ぶ。プロ
 | Google Agent Platform（旧 Vertex AI） | `vertex` | ADC（OAuth トークン） | [setup-vertex-adc.md](setup-vertex-adc.md) |
 | Google AI Studio（Gemini API） | `gemini` | 静的 API キー | [setup-ai-studio.md](setup-ai-studio.md) |
 | OpenAI | `openai`（既定） | `OPENAI_API_KEY` | [configuration.md](configuration.md) |
+| Anthropic | `anthropic` | `ANTHROPIC_API_KEY` | [configuration.md](configuration.md) |
 
 ### どちらの Google 方式を選ぶか
 - **`vertex`（推奨・Google Cloud 前提）**: GCP プロジェクト配下で Vertex を使う。認証は ADC で API キー不要。

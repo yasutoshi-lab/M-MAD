@@ -19,6 +19,20 @@ class TestGetLlmConfig:
         assert "generativelanguage.googleapis.com" in cfg["base_url"]
         assert cfg["api_key"] == "k"
 
+    def test_anthropic(self, clean_env, monkeypatch):
+        monkeypatch.setenv("LLM_PROVIDER", "anthropic")
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "k")
+        cfg = clean_env.get_llm_config()
+        assert cfg["provider"] == "anthropic"
+        assert cfg["model"] == "claude-haiku-4-5"
+        assert cfg["base_url"] == "https://api.anthropic.com/v1/"
+        assert cfg["api_key"] == "k"
+
+    def test_anthropic_model_override(self, clean_env, monkeypatch):
+        monkeypatch.setenv("LLM_PROVIDER", "anthropic")
+        monkeypatch.setenv("LLM_MODEL", "claude-opus-4-8")
+        assert clean_env.get_llm_config()["model"] == "claude-opus-4-8"
+
     def test_vertex(self, clean_env, monkeypatch):
         monkeypatch.setenv("LLM_PROVIDER", "vertex")
         monkeypatch.setenv("GCP_PROJECT", "p")
