@@ -67,9 +67,28 @@ sh run_stage2_3.sh
 #   ending=2000 を渡すと入力全件を対象にする
 ```
 
-- 入力: `data/output_{lp}_{system}_v1/`（Stage1 出力）。
-- 出力: `data/stage2_3_{lp}_{system}/{i}_v1.json`（討論後の最終アノテーション）。
+- 入力: `data/output_{lp}_{system}_v1/`（Stage1 出力）。`-i <dir>` で上書き可（#55）。
+- 出力: `data/stage2_3_{lp}_{system}/{i}_v1.json`（討論後の最終アノテーション）。`-o <dir>` で上書き可（#55）。
 - 既に非空の出力があるサンプルはスキップ（再開可能）。
+
+## 3b. run-level jury（プロバイダ別の独立実行・Issue #55）
+
+同一入力に対しプロバイダごとに Stage1→Stage2&3 を丸ごと独立実行し、プロバイダ名入りの
+ディレクトリへ出力を分離する。**各 run の内部は単一プロバイダ**（討論・Judge に混成なし＝
+論文準拠）。結果の並記・一致率レポートは後処理（#56）で行う。
+
+```bash
+uv run python code/run_jury.py -s <system> -lp <lp>                  # 既定: openai anthropic vertex
+uv run python code/run_jury.py -s <manual_id> -lp ja-vi -p openai vertex --ending 5
+```
+
+- 出力: `data/output_{lp}_{system}_{provider}/` / `data/stage2_3_{lp}_{system}_{provider}/`
+- **`.env` の前提**: プロバイダ固有のキー変数（`OPENAI_API_KEY` / `ANTHROPIC_API_KEY` /
+  `GEMINI_API_KEY`、vertex は `GCP_PROJECT`＋事前の `gcloud auth application-default login`）を
+  設定する。汎用 `LLM_MODEL` / `LLM_BASE_URL` / `LLM_API_KEY` はサブプロセス起動時に
+  空値で上書きされ各プロバイダ既定へ解決されるため、jury では使われない
+- 認証未設定のプロバイダは実行前チェック（preflight）でスキップし他は続行。Stage1 が全サンプル
+  `success:false`（API 全滅・#52）のプロバイダは Stage2&3 をスキップして警告する
 
 ## 4. メタ評価
 

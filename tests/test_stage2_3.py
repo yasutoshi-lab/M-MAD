@@ -72,6 +72,23 @@ class TestGetLanguageNames:
         assert stage2_3.get_language_names('ja-my') == ('Japanese', 'Burmese')
 
 
+class TestParseArgs:
+    """parse_args のテスト（#55: 入出力ディレクトリ上書きオプション）。"""
+
+    def test_dirs_default_to_none(self, monkeypatch):
+        monkeypatch.setattr('sys.argv', ['stage2_3.py', 'sys1', 'ja-en', '0', '2'])
+        args = stage2_3.parse_args()
+        assert args.input_dir is None
+        assert args.output_dir is None
+
+    def test_dirs_can_be_overridden(self, monkeypatch):
+        monkeypatch.setattr('sys.argv', ['stage2_3.py', 'sys1', 'ja-en', '0', '2',
+                                         '-i', 'in_dir', '-o', 'out_dir'])
+        args = stage2_3.parse_args()
+        assert args.input_dir == 'in_dir'
+        assert args.output_dir == 'out_dir'
+
+
 class TestMessageBuilders:
     """メッセージ構築系のテスト（S2-MSG）。"""
 
