@@ -47,7 +47,8 @@ line_no <TAB> path <TAB> kind
 | `start_time` / `end_time` | 実行時刻 |
 | `model_name` / `temperature` | モデル・温度 |
 | `num_players` | プレイヤー数（4 次元 + Judge = 5） |
-| `success` | 正常完了フラグ |
+| `success` | 正常完了フラグ。**false = LLM 応答を 1 度も得られなかったエージェント（API 全滅）があった**ことを示す（Issue #52）。集計時は `success: false` のサンプルを除外または再実行すること |
+| `api_failures` | API 全滅したエージェントの記録（`"<agent 名>: all attempts failed (last error: ...)"` の配列。正常時は `[]`）。パース失敗由来の non-translation フォールバック（従来設計）はここに記録されない |
 | `src_lng` / `tgt_lng` | 言語表示名（例 `Chinese` / `English`） |
 | `source_segment` / `target_segment` | 原文・訳文 |
 | `accuracy_annotations` … `style_annotations` | プロンプトテンプレート由来のフィールド（`stage1.json` のキー） |

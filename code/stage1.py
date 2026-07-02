@@ -177,6 +177,8 @@ class Debate:
         self.max_round = max_round
         self.sleep_time = sleep_time
         self.few_shots = few_shots
+        # API 全滅（1 度も応答を得られなかったエージェント）の記録。run() の success 判定に使う（Issue #52）。
+        self.api_failures = []
 
         # init save file
         now = datetime.now()
@@ -188,6 +190,7 @@ class Debate:
             'temperature': temperature,
             'num_players': len(NAME_LIST),
             'success': False,
+            'api_failures': [],
             "src_lng": "",
             "tgt_lng": "",
             'source_segment': '',
@@ -263,7 +266,8 @@ class Debate:
             task_prompt (str): 評価タスクのプロンプト。
 
         Returns:
-            str: エージェントのアノテーション。全リトライ失敗時は空アノテーションを返す。
+            str: エージェントのアノテーション。全リトライ失敗時は空アノテーションを返す
+                （このとき api_failures に記録し、run() で success=false になる・Issue #52）。
         """
         for user_shot, mem_shot in zip(user_shots, mem_shots):
             agent.add_event(user_shot)
@@ -275,13 +279,19 @@ class Debate:
         annotations = '{"annotations": []}'  # 全リトライ失敗時のフォールバック
         count = 0
         retry = True
+        last_error = None
         while retry and count < 10:
             count += 1
             try:
                 annotations = agent.ask()
                 retry = False
             except Exception as e:
+                last_error = e
                 print(f"An error occurred: {e}")
+        if retry:
+            # 1 度も応答を得られなかった（API 全滅）。空フォールバックが評価結果として
+            # 正常出力に紛れないよう記録する（Issue #52）。
+            self.api_failures.append(f"{agent.name}: all attempts failed (last error: {last_error})")
 
         agent.add_memory(annotations)
         return annotations
@@ -328,29 +338,49 @@ class Debate:
             nontran_user_shot[3], nontran_mem_shot[3], self.save_file['style_agent'])
 
         self.judge.add_event(self.save_file['judge_agent'].replace('##accuracy_annotations##', self.accuracy_annotations).replace('##fluency_annotations##', self.fluency_annotations).replace('##term_annotations##', self.term_annotations).replace('##style_annotations##', self.style_annotations))
+        self.judge_ans = self._run_judge()
+
+    def _run_judge(self):
+        """Judge をリトライ実行し、最終 MQM アノテーション dict を返す。
+
+        応答は得られたが有効な JSON にパースできない場合は、従来どおり non-translation に
+        フォールバックする（論文設計の逃げ道・記録なし）。1 度も応答を得られなかった場合
+        （API 全滅）は api_failures に記録したうえで同じフォールバックを返し、run() で
+        success=false になる（Issue #52。パース失敗と API 失敗を区別する）。
+
+        Returns:
+            dict: 最終 MQM アノテーション。
+        """
         count = 0
-        self.judge_ans = None
+        judge_ans = None
+        got_response = False
+        last_error = None
         while count < 10:
             count += 1
             try:
                 raw = self.judge.ask()
             except Exception as e:
+                last_error = e
                 print(f"An error occurred: {e}")
                 continue
+            got_response = True
 
             match = extract_json(raw)
             if match:
                 try:
-                    self.judge_ans = parse_json_obj(match)
-                    self.judge.add_memory(self.judge_ans)
+                    judge_ans = parse_json_obj(match)
+                    self.judge.add_memory(judge_ans)
                     break
                 except Exception as e:
                     print(f"Error parsing judge output: {e}. Retrying...")
 
         # 10 回で有効な JSON を得られなかった場合は non-translation にフォールバック
-        if not isinstance(self.judge_ans, dict):
-            self.judge_ans = {'annotations': [{'error span': 'all', 'category': 'non-translation', 'severity': 'major', 'is_source_error': 'no'}]}
-            self.judge.add_memory(self.judge_ans)
+        if not isinstance(judge_ans, dict):
+            if not got_response:
+                self.api_failures.append(f"{self.judge.name}: all attempts failed (last error: {last_error})")
+            judge_ans = {'annotations': [{'error span': 'all', 'category': 'non-translation', 'severity': 'major', 'is_source_error': 'no'}]}
+            self.judge.add_memory(judge_ans)
+        return judge_ans
 
     def save_file_to_json(self, id):
         """save_file を `{id}_v1.json` として出力ディレクトリに書き出す。
@@ -389,14 +419,18 @@ class Debate:
     def run(self):
         """Judge の最終結果を save_file に統合し、成功フラグと全プレイヤー履歴を確定する。
 
-        self.judge_ans（最終アノテーション）を save_file にマージし、success を True に設定、
+        self.judge_ans（最終アノテーション）を save_file にマージし、API 全滅の記録が
+        無ければ success を True に（あれば False にして api_failures を格納・Issue #52）、
         各プレイヤーのチャット履歴を save_file['players'] に格納する。
 
         Returns:
             None
         """
         self.save_file.update(self.judge_ans)
-        self.save_file['success'] = True
+        self.save_file['api_failures'] = self.api_failures
+        self.save_file['success'] = not self.api_failures
+        if self.api_failures:
+            print(f"[error] sample had total API failures: {self.api_failures}")
 
         for player in self.players:
             self.save_file['players'][player.name] = player.memory_lst
