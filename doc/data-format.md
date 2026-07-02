@@ -56,7 +56,8 @@ line_no <TAB> path <TAB> kind
 | `annotations` | **最終 MQM アノテーション配列**（Judge 統合結果） |
 | `players` | 各プレイヤー名 → チャット履歴（`memory_lst`）の辞書 |
 
-`annotations`（および Stage2&3 の出力）の 1 要素:
+`annotations`（および Stage2&3 の出力）の 1 要素。各フィールドの意味・カテゴリ／severity の
+定義と読み方は [mqm-glossary.md](mqm-glossary.md) を参照:
 
 ```json
 {
@@ -98,5 +99,8 @@ line_no <TAB> path <TAB> kind
   GPT4-5shot	-1602.6
   ```
 
-スコアは MQM ペナルティに基づく負値（major/minor の重み付き和）。算出は
-[meta-evaluation.md](meta-evaluation.md) を参照。
+スコアは MQM ペナルティに基づく負値（重み: minor=-1 / major=-5 / non-translation=-25）。
+**0 が最良で、負に大きいほど低品質**。`.seg.score` の行番号は入力ファイルの行順に対応し、
+スコアの根拠（個々のエラー）は同じ id の Stage2&3 出力 `annotations` に遡って確認できる。
+算出方法とスコアの読み方は [meta-evaluation.md](meta-evaluation.md)、用語は
+[mqm-glossary.md](mqm-glossary.md) を参照。
