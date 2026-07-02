@@ -248,6 +248,12 @@ def parse_args():
     parser.add_argument("lp", type=str, help="Language pair (e.g. zh-en)")
     parser.add_argument("starting", type=int, help="Start sample index")
     parser.add_argument("ending", type=int, help="End sample index (2000 = all)")
+    # 省略時は従来命名（data/output_{lp}_{system}_v1 / data/stage2_3_{lp}_{system}）を使う。
+    # run-level jury（#55）ではプロバイダ別ディレクトリを指定して出力衝突を避ける。
+    parser.add_argument("-i", "--input-dir", type=str, default=None,
+                        help="Stage1 出力ディレクトリの上書き（省略時は従来命名）")
+    parser.add_argument("-o", "--output-dir", type=str, default=None,
+                        help="Stage2&3 出力ディレクトリの上書き（省略時は従来命名）")
     return parser.parse_args()
 
 
@@ -371,15 +377,15 @@ def main():
     # リポジトリルートをスクリプト位置から解決（実行ディレクトリに依存しない）。
     MAD_PATH = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-    # Stage1 の出力（入力）: data/output_{lp}_{system}_v1
-    input_dir = os.path.join(MAD_PATH, "data", f"output_{lp}_{system}_v1")
+    # Stage1 の出力（入力）: 既定は data/output_{lp}_{system}_v1（-i で上書き可・#55）
+    input_dir = args.input_dir or os.path.join(MAD_PATH, "data", f"output_{lp}_{system}_v1")
     all_json_data = load_json_files(input_dir)
     n = len(all_json_data)
 
     random.seed(0)
 
-    # Stage2&3 の出力先も data/ 配下に統一（Stage1 出力と同じ場所に揃える）。
-    folder_path = os.path.join(MAD_PATH, "data", f"stage2_3_{lp}_{system}")
+    # Stage2&3 の出力先: 既定は data/stage2_3_{lp}_{system}（-o で上書き可・#55）
+    folder_path = args.output_dir or os.path.join(MAD_PATH, "data", f"stage2_3_{lp}_{system}")
     os.makedirs(folder_path, exist_ok=True)
     if ending == 2000:
         ending = n
