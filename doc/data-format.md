@@ -45,7 +45,7 @@ line_no <TAB> path <TAB> kind
 | キー | 内容 |
 |---|---|
 | `start_time` / `end_time` | 実行時刻 |
-| `model_name` / `temperature` | モデル・温度 |
+| `model_name` / `provider` / `temperature` | **実使用モデルとプロバイダ**（run() 時に config から解決・#60。jury 運用での来歴突合に使う）・温度 |
 | `num_players` | プレイヤー数（4 次元 + Judge = 5） |
 | `success` | 正常完了フラグ。**false = LLM 応答を 1 度も得られなかったエージェント（API 全滅）があった**ことを示す（Issue #52）。集計時は `success: false` のサンプルを除外または再実行すること |
 | `api_failures` | API 全滅したエージェントの記録（`"<agent 名>: all attempts failed (last error: ...)"` の配列。正常時は `[]`）。パース失敗由来の non-translation フォールバック（従来設計）はここに記録されない |

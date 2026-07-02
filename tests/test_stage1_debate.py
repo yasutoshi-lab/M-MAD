@@ -89,15 +89,41 @@ class TestRunSuccessFlag:
         debate.save_file = {"success": False, "players": {}}
         return debate
 
-    def test_success_true_without_failures(self):
+    def test_success_true_without_failures(self, clean_env):
         debate = self._base_debate()
         debate.run()
         assert debate.save_file["success"] is True
         assert debate.save_file["api_failures"] == []
 
-    def test_success_false_with_failures(self):
+    def test_success_false_with_failures(self, clean_env):
         debate = self._base_debate()
         debate.api_failures.append("Judge: all attempts failed (last error: boom)")
         debate.run()
         assert debate.save_file["success"] is False
         assert debate.save_file["api_failures"] == debate.api_failures
+
+
+class TestRunProvenance:
+    """run() が実使用モデルと provider を記録すること（Issue #60）。"""
+
+    def _base_debate(self):
+        debate = make_debate()
+        debate.judge_ans = {"annotations": []}
+        debate.players = []
+        debate.save_file = {"success": False, "players": {}}
+        return debate
+
+    def test_records_default_openai(self, clean_env):
+        debate = self._base_debate()
+        debate.run()
+        assert debate.save_file["model_name"] == "gpt-4.1-mini"
+        assert debate.save_file["provider"] == "openai"
+
+    def test_records_actual_provider_model(self, clean_env, monkeypatch):
+        # LLM_PROVIDER=anthropic の run では表示専用デフォルトではなく実使用モデルを記録する。
+        monkeypatch.setenv("LLM_PROVIDER", "anthropic")
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "k")
+        debate = self._base_debate()
+        debate.run()
+        assert debate.save_file["model_name"] == "claude-haiku-4-5"
+        assert debate.save_file["provider"] == "anthropic"
