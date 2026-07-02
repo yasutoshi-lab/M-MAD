@@ -63,7 +63,11 @@ class Agent:
                 model=model,
                 messages=messages,
                 temperature=temperature,
-                max_tokens=1000,  # 応答トークン上限（出力長の固定キャップ）
+                # 応答トークン上限。gemini の thinking はこの枠を消費するため、1000 だと
+                # 長い入力で枠を使い切り finish_reason=MAX_TOKENS の空応答（message=None）に
+                # なり success:false を招いていた（#64）。8192 に拡大して本文出力の余地を確保。
+                # 出力は短い JSON のため他プロバイダの実害・コスト増はない（キャップは上限）。
+                max_tokens=8192,
             )
             gen = response.choices[0].message.content
             return gen
