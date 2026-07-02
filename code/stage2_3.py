@@ -5,7 +5,7 @@ import re
 import argparse
 import backoff
 from langcodes import Language
-from openai import RateLimitError, APIError, APIConnectionError, InternalServerError, APITimeoutError
+from openai import RateLimitError, APIConnectionError, InternalServerError, APITimeoutError
 from utils.config import build_openai_client
 
 NUM_AGENTS = 2
@@ -95,9 +95,10 @@ def _log_backoff(details):
     print(f"[warn] LLM call failed (attempt {details['tries']}), backing off {details['wait']:.1f}s: {exc}")
 
 
+# リトライは一時的エラーのみ（4xx 恒久エラーは即時伝播・Issue #58。agent.py と同方針）
 @backoff.on_exception(
     backoff.expo,
-    (RateLimitError, APIError, APIConnectionError, InternalServerError, APITimeoutError),
+    (RateLimitError, APIConnectionError, InternalServerError, APITimeoutError),
     max_tries=5,
     on_backoff=_log_backoff,
 )

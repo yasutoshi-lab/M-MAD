@@ -1,5 +1,5 @@
 import backoff
-from openai import RateLimitError, APIError, APIConnectionError, InternalServerError, APITimeoutError
+from openai import RateLimitError, APIConnectionError, InternalServerError, APITimeoutError
 from .openai_utils import OutOfQuotaException, AccessTerminatedException
 from .config import build_openai_client
 
@@ -35,7 +35,10 @@ class Agent:
         self.memory_lst = []
         self.sleep_time = sleep_time
 
-    @backoff.on_exception(backoff.expo, (RateLimitError, APIError, APIConnectionError, InternalServerError, APITimeoutError), max_tries=20)
+    # リトライは一時的エラー（429 / 接続断 / タイムアウト / 5xx）のみ。4xx の恒久エラー
+    # （BadRequest / Authentication 等）は即時に呼び出し元へ伝播し、_eval_dimension /
+    # _run_judge が api_failures に記録して success:false に落とす（Issue #52/#58）。
+    @backoff.on_exception(backoff.expo, (RateLimitError, APIConnectionError, InternalServerError, APITimeoutError), max_tries=20)
     def query(self, messages: "list[dict]", api_key: str, temperature: float) -> str:
         """make a query
 
