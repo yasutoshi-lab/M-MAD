@@ -252,11 +252,14 @@ def parse_args():
 
 
 def get_language_names(lang_pair):
-    """言語ペア（例 zh-en）から src/tgt の表示名を返す（stage1 と同方式）。"""
-    src_code, tgt_code = lang_pair.split("-")
+    """言語ペア（例 zh-en / ja-zh-Hans）から src/tgt の表示名を返す（stage1 と同方式）。
+
+    maxsplit=1 で分割するため、ターゲットが "zh-Hans" のような複合ロケールでも解決できる（Issue #50）。
+    """
+    src_code, tgt_code = lang_pair.split("-", 1)
     return (
-        Language.make(language=src_code).display_name(),
-        Language.make(language=tgt_code).display_name(),
+        Language.get(src_code).display_name(),
+        Language.get(tgt_code).display_name(),
     )
 
 

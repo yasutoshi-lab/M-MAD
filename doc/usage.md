@@ -20,8 +20,20 @@ cp .env.example .env    # LLM プロバイダを設定（例: vertex / gemini / 
 `annotated == "no"` の行はアノテーションをスキップし `"None"` を書き出す。形式の詳細は
 [data-format.md](data-format.md)。
 
-- `lp`: 言語ペア（`zh-en` / `en-de` / `he-en`）
-- `system`: MT システム名（例: `ANVITA`, `GPT4-5shot`, `refA`, `synthetic_ref` …）
+- `lp`: 言語ペア（`zh-en` / `en-de` / `he-en`、および ja→多言語診断の `ja-{lang}`。`ja-zh-Hans` 等の複合ロケール可）
+- `system`: MT システム名（例: `ANVITA`, `GPT4-5shot`, `refA`, `synthetic_ref` …。ja 診断ではマニュアル ID）
+
+### 1b. 手順書 JSON からの入力生成（ja→多言語診断・Issue #50）
+
+`.input/<manual_id>/{manual_id}-{lang}.json`（原文 `*-ja.json`＋翻訳）から Stage1 入力を生成する:
+
+```bash
+uv run python code/prepare_input.py                        # .input 配下の全マニュアル×全言語
+uv run python code/prepare_input.py -m <manual_id> -l en vi my   # マニュアル・言語を指定
+```
+
+→ `data/input.ja-{lang}.{manual_id}_v2.txt`（本体）と `…_v2.map.tsv`（セグメント対応表）を生成。
+生成物は `.gitignore` 済み（元データ同様コミットしない）。詳細は [data-format.md](data-format.md)。
 
 ## 2. Stage 1（Dimension Partition）
 
