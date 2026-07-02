@@ -7,6 +7,7 @@ import importlib
 import traceback
 from langcodes import Language
 from utils.agent import Agent
+from utils.config import get_llm_config
 from datetime import datetime
 from tqdm import tqdm
 
@@ -187,6 +188,7 @@ class Debate:
             'start_time': current_time,
             'end_time': '',
             'model_name': model_name,
+            'provider': '',
             'temperature': temperature,
             'num_players': len(NAME_LIST),
             'success': False,
@@ -421,11 +423,18 @@ class Debate:
 
         self.judge_ans（最終アノテーション）を save_file にマージし、API 全滅の記録が
         無ければ success を True に（あれば False にして api_failures を格納・Issue #52）、
-        各プレイヤーのチャット履歴を save_file['players'] に格納する。
+        実使用モデル・provider（config 解決値・Issue #60）と各プレイヤーのチャット履歴を
+        save_file に格納する。
 
         Returns:
             None
         """
+        # 実使用モデル・プロバイダを config から解決して記録する。__init__ の model_name は
+        # 表示専用の既定値でエージェント生成に使われないため、実態で上書きする（Issue #60）。
+        llm_config = get_llm_config()
+        self.save_file['model_name'] = llm_config['model']
+        self.save_file['provider'] = llm_config['provider']
+
         self.save_file.update(self.judge_ans)
         self.save_file['api_failures'] = self.api_failures
         self.save_file['success'] = not self.api_failures
