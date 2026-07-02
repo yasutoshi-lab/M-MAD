@@ -1,5 +1,7 @@
 """stage1.py の純粋関数（L1）ユニットテスト。"""
 
+import json
+
 import pytest
 
 import stage1
@@ -45,6 +47,14 @@ class TestLoadFewShots:
         assert stage1.load_few_shots('zh-en').__name__ == 'few_shot_demos'
         assert stage1.load_few_shots('en-de').__name__ == 'few_shot_demos_de'
         assert stage1.load_few_shots('he-en').__name__ == 'few_shot_demos_he'
+        assert stage1.load_few_shots('ja-en').__name__ == 'few_shot_demos_ja'
+
+    def test_source_resolution_ja_no_warning(self, capsys):
+        # ja→X は全ターゲットで ja 共有デモに解決される（設計上の共有・warning なし。Issue #43）。
+        for lang_pair in ['ja-vi', 'ja-my', 'ja-de', 'ja-zh-Hans']:
+            mod = stage1.load_few_shots(lang_pair)
+            assert mod.__name__ == 'few_shot_demos_ja', lang_pair
+        assert 'No dedicated few-shot' not in capsys.readouterr().out
 
     def test_target_fallback_english(self, capsys):
         mod = stage1.load_few_shots('fr-en')
@@ -52,7 +62,7 @@ class TestLoadFewShots:
         assert 'No dedicated few-shot' in capsys.readouterr().out
 
     def test_target_fallback_german(self, capsys):
-        mod = stage1.load_few_shots('ja-de')
+        mod = stage1.load_few_shots('ko-de')
         assert mod.__name__ == 'few_shot_demos_de'
         assert 'No dedicated few-shot' in capsys.readouterr().out
 
@@ -68,3 +78,18 @@ class TestLoadFewShots:
             assert hasattr(mod, name)
         assert len(mod.accuracy_user_shot) == 3
         assert len(mod.nontran_user_shot) >= 4
+
+    def test_ja_module_exports_and_valid_json(self):
+        # ja モジュールの API 互換（変数名・件数）と、gold mem_shot 全件の構文妥当性を検証。
+        mod = stage1.load_few_shots('ja-en')
+        for prefix in ['accuracy', 'fluency', 'term', 'style']:
+            user = getattr(mod, f'{prefix}_user_shot')
+            mem = getattr(mod, f'{prefix}_mem_shot')
+            assert len(user) == 3 and len(mem) == 3, prefix
+            for shot in mem:
+                parsed = json.loads(shot)
+                assert 'annotations' in parsed, prefix
+        assert len(mod.nontran_user_shot) == 4 and len(mod.nontran_mem_shot) == 4
+        for shot in mod.nontran_mem_shot:
+            parsed = json.loads(shot)
+            assert parsed['annotations'][0]['category'] == 'non-translation'
