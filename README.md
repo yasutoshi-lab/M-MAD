@@ -21,6 +21,8 @@ For a detailed explanation of the M-MAD framework, please refer to the paper:
 - `data/`: Input data and output-annotated data  
   Our input data is sourced from WMT-23 Metrics Shared Task. You can also downloaded it from [https://github.com/google-research/mt-metrics-eval](https://github.com/google-research/mt-metrics-eval) or https://wmt-metrics-task.github.io/.
 - `metrics_scores/`: Meta-evaluation results
+- `doc/`: Detailed documentation (architecture / usage / configuration / data formats / contributing; Japanese). Start from [doc/README.md](doc/README.md).
+- `tests/`: Unit tests (pytest; run in CI together with ruff lint)
 
 ## **💻** Running the Code
 
@@ -47,9 +49,9 @@ uv run pre-commit install   # (optional) enable local pre-commit ruff hook
 
 Tests and lint also run automatically in CI (GitHub Actions) on push / PR to `main`.
 
-#### LLM provider (OpenAI or Gemini)
+#### LLM provider (OpenAI / Gemini / Vertex / Anthropic)
 
-The LLM backend is selected via environment variables (loaded automatically from a `.env` file at the repo root; see `.env.example`).
+The LLM backend is selected via environment variables (loaded automatically from a `.env` file at the repo root; see `.env.example` and [doc/configuration.md](doc/configuration.md)).
 
 ```bash
 cp .env.example .env
@@ -72,7 +74,8 @@ cp .env.example .env
   GEMINI_API_KEY=your-gemini-api-key
   ```
   Uses `base_url=https://generativelanguage.googleapis.com/v1beta/openai/`.
-- **OpenAI** (default): set `LLM_PROVIDER=openai` and `OPENAI_API_KEY`.
+- **OpenAI** (default): set `LLM_PROVIDER=openai` and `OPENAI_API_KEY` (default model: `gpt-4.1-mini`).
+- **Anthropic**: set `LLM_PROVIDER=anthropic` and `ANTHROPIC_API_KEY` (default model: `claude-haiku-4-5`, via the OpenAI-compatible endpoint `https://api.anthropic.com/v1/`).
 
 ### 2) Stage 1 (Dimension Partition)
 
@@ -93,6 +96,17 @@ To run the meta-evaluation for the metrics, execute the following file, where we
 ```bash
 wmt23_metrics.ipynb
 ```
+
+## Fork Extensions (ja → multilingual diagnosis)
+
+This fork adds tooling for diagnosing Japanese-to-multilingual MT quality with M-MAD as the judge, while keeping the paper's method unchanged (single-provider runs, 3 stages, MQM 4 dimensions):
+
+- **Input preprocessing** (`code/prepare_input.py`): converts instruction-manual JSON (`.input/<manual_id>/`) into Stage1 tab-separated inputs plus a segment map. See [doc/usage.md](doc/usage.md).
+- **Shared ja→en 4-shot demos** (`code/few_shot_demos_ja.py`): applied to all `ja-*` language pairs via source-language resolution. See [doc/prompts-and-fewshot.md](doc/prompts-and-fewshot.md).
+- **Run-level jury** (`code/run_jury.py`): runs the whole pipeline independently per provider (OpenAI / Anthropic / Vertex) with separated output directories — each run stays single-provider (paper-compliant).
+- **Agreement report** (`code/jury_report.py`): read-only post-processing that juxtaposes per-provider scores and descriptive agreement statistics (Spearman ρ, Cohen's κ). No combined score is produced.
+
+Reliability: total API failures are surfaced as `success: false` + `api_failures` in Stage1 outputs, permanent 4xx errors fail fast (no retry), and outputs record the actually used `model_name` / `provider`.
 
 ## Citation
 
