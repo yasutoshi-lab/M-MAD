@@ -7,6 +7,8 @@ MQM（Multidimensional Quality Metrics）アノテーションガイドライン
 
 - 論文: *Multidimensional Multi-Agent Debate for Advanced Machine Translation Evaluation*（arXiv:2412.20127）
 - 評価対象: WMT-23 Metrics Shared Task（`zh-en` / `en-de` / `he-en`）
+- fork 拡張: ja→多言語診断（`ja-{lang}`。手順書 JSON 前処理・ja 共有 few-shot・run-level jury。
+  手法自体は論文のまま。後述の「run-level jury」節と [usage.md](usage.md) を参照）
 - フレームワーク図: [`asset/framework.png`](../asset/framework.png)
 
 ## 3 ステージ
@@ -46,6 +48,9 @@ MQM を **4 次元**に分解し、各次元エージェント + Judge の計 5 
 - 重大な破綻（garbled / 無関係訳）には特別カテゴリ **non-translation**（segment 全体・1 件のみ）を割り当てる。
 - Judge 出力は `extract_json()` → `parse_json_obj()`（`json.loads`→失敗時 `ast.literal_eval`）で安全にパース。
   最大 10 回リトライ、失敗時は non-translation にフォールバック。
+- **可観測性**: LLM 応答を 1 度も得られなかったエージェント（API 全滅）があると、出力 JSON は
+  `success: false`＋`api_failures`（記録配列）になる（#52）。パース失敗由来のフォールバック
+  （論文設計の逃げ道）とは区別される。出力には実使用の `model_name` / `provider` も記録される（#60）。
 
 実装の中心は `Debate` クラス（1 サンプル分の討論を統括）と `DebatePlayer`（`Agent` 派生）。
 
@@ -61,11 +66,21 @@ MQM を **4 次元**に分解し、各次元エージェント + Judge の計 5 
 `google-research/mt-metrics-eval` を用いて seg / sys レベル相関を算出する。詳細は
 [meta-evaluation.md](meta-evaluation.md)。
 
+### run-level jury（fork 拡張・`code/run_jury.py` / `code/jury_report.py`）
+同一入力に対しパイプライン全体をプロバイダごとに独立実行し（**各 run 内は単一プロバイダ＝
+論文準拠のまま**）、出力を `data/{output,stage2_3}_{lp}_{system}_{provider}` に分離する。
+`jury_report.py` は完了済み出力を読み取り専用で突合し、プロバイダ別スコアの並記と一致率等の
+**記述統計**（Spearman ρ / Cohen's κ / 不一致セグメント列挙）を出力する。統合スコアは作らない
+（レベル 1 運用。討論内のプロバイダ混成は論文の future work であり未実装）。
+詳細は [usage.md](usage.md) / [meta-evaluation.md](meta-evaluation.md)。
+
 ## エージェント抽象（`code/utils/agent.py`）
 `Agent` は `memory_lst`（system / user / assistant のチャット履歴）を保持し、
 `set_meta_prompt` / `add_event` / `add_memory` で構築、`ask()`→`query()` が LLM を呼ぶ。
-`backoff` で RateLimit/APIError 等を指数バックオフ・最大 20 回リトライ。LLM 接続先は
-`utils/config.py:build_openai_client()` が環境変数から解決する（OpenAI / Gemini / Vertex）。
+`backoff` は**一時的エラーのみ**（RateLimit / 接続断 / タイムアウト / 5xx）を指数バックオフ・
+最大 20 回リトライし、4xx の恒久エラー（BadRequest / 認証等）は即時伝播して #52 の
+`success:false` 経路に落ちる（#58）。LLM 接続先は
+`utils/config.py:build_openai_client()` が環境変数から解決する（OpenAI / Gemini / Vertex / Anthropic）。
 
 ## 論文との対応・整合性
 
@@ -86,12 +101,15 @@ MQM を **4 次元**に分解し、各次元エージェント + Judge の計 5 
 | パス | 役割 |
 |---|---|
 | `code/stage1.py` | Stage 1（`Debate`/`DebatePlayer`、CLI エントリ） |
-| `code/stage2_3.py` | Stage 2 & 3（討論・最終判定。関数分割済み） |
-| `code/few_shot_demos.py` / `_de.py` / `_he.py` | 言語ペア別 few-shot 例 |
+| `code/stage2_3.py` | Stage 2 & 3（討論・最終判定。関数分割済み。`-i`/`-o` で入出力上書き可） |
+| `code/few_shot_demos.py` / `_de.py` / `_he.py` / `_ja.py` | 言語ペア別 few-shot 例（`_ja` は全 ja-* 共有） |
+| `code/prepare_input.py` | 手順書 JSON → Stage1 入力の前処理（fork 拡張） |
+| `code/run_jury.py` | run-level jury: プロバイダ別独立実行（fork 拡張） |
+| `code/jury_report.py` | プロバイダ間一致率レポート（fork 拡張・読み取り専用） |
 | `code/utils/agent.py` | `Agent` 基底クラス（履歴管理・LLM 呼び出し・backoff） |
 | `code/utils/config.py` | プロバイダ設定解決（`get_llm_config` / `build_openai_client`） |
 | `code/utils/openai_utils.py` | トークン計算・モデル別最大コンテキスト・例外 |
 | `code/utils/stage1.json` | Stage1 の全プロンプトテンプレート |
 | `data/` | 入力データと Stage 出力 JSON |
 | `metrics_scores/` | メタ評価結果 |
-| `tests/` | ユニットテスト（pytest） |
+| `tests/` | ユニットテスト（pytest。L1 純粋関数＋L2 LLM モック） |
