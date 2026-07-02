@@ -20,12 +20,17 @@ NAME_LIST=[
 ]
 
 # 言語ペアごとの few-shot デモモジュール（論文の 4-shot demonstration strategy に対応）。
-# 完全一致するペアが最優先。専用デモが無いペアはターゲット言語で選び、
+# 完全一致するペアが最優先。次にソース言語（ja→X 診断では全ターゲットに同一デモを
+# 共通適用して比較可能性を担保する・Issue #43）、続いてターゲット言語で選び、
 # それでも無ければ English 系（zh-en の few_shot_demos）にフォールバックする。
 DEMO_MODULE_BY_PAIR = {
     "zh-en": "few_shot_demos",
     "en-de": "few_shot_demos_de",
     "he-en": "few_shot_demos_he",
+    "ja-en": "few_shot_demos_ja",
+}
+DEMO_MODULE_BY_SOURCE = {
+    "ja": "few_shot_demos_ja",
 }
 DEMO_MODULE_BY_TARGET = {
     "en": "few_shot_demos",
@@ -43,10 +48,14 @@ def load_few_shots(lang_pair: str):
     Returns:
         module: accuracy_user_shot 等の few-shot 変数群を持つモジュール。
 
-    解決順: 1) 完全一致ペア → 2) ターゲット言語デフォルト → 3) English 系デフォルト。
-    完全一致しない場合は、専用 few-shot が無い旨の warning を表示する。
+    解決順: 1) 完全一致ペア → 2) ソース言語（設計上の共有デモ。warning なし・Issue #43）
+    → 3) ターゲット言語デフォルト → 4) English 系デフォルト。
+    3)・4) のフォールバック時のみ、専用 few-shot が無い旨の warning を表示する。
     """
     module_name = DEMO_MODULE_BY_PAIR.get(lang_pair)
+    if module_name is None:
+        src_code = lang_pair.split("-")[0]
+        module_name = DEMO_MODULE_BY_SOURCE.get(src_code)
     if module_name is None:
         tgt_code = lang_pair.split("-")[-1]
         module_name = DEMO_MODULE_BY_TARGET.get(tgt_code, DEFAULT_DEMO_MODULE)
