@@ -46,6 +46,7 @@ MQM を **4 次元**に分解し、各次元エージェント + Judge の計 5 
 - 各次元エージェントには `base_system_prompt`、Judge には `judge_system_prompt` を設定。
 - 言語ペア別 **4-shot**（3 例 + non-translation 1 例）を注入してから評価（[prompts-and-fewshot.md](prompts-and-fewshot.md)）。
 - 重大な破綻（garbled / 無関係訳）には特別カテゴリ **non-translation**（segment 全体・1 件のみ）を割り当てる。
+- 各次元のサブカテゴリ・severity（major/minor）等の用語定義は [mqm-glossary.md](mqm-glossary.md) を参照。
 - Judge 出力は `extract_json()` → `parse_json_obj()`（`json.loads`→失敗時 `ast.literal_eval`）で安全にパース。
   最大 10 回リトライ、失敗時は non-translation にフォールバック。
 - **可観測性**: LLM 応答を 1 度も得られなかったエージェント（API 全滅）があると、出力 JSON は
@@ -61,6 +62,37 @@ MQM を **4 次元**に分解し、各次元エージェント + Judge の計 5 
 3. 各ラウンド後、`judge_prompt` で 2 者のアノテーションが一貫（yes/no）かを判定。yes なら早期終了。
 4. 4 次元の合意結果を統合 Judge（`run_final_judge`）に渡し、重複除去・重大度優先ルール適用のうえ
    最終 MQM アノテーションを JSON 出力。
+
+#### 討論ラウンドの進行（`run_dimension_debate`）
+
+定数は `NUM_AGENTS = 2` / `MAX_ROUNDS = 4`（`code/stage2_3.py` 先頭）。1 次元の討論は
+次のように進む:
+
+```
+Stage1 アノテーション
+   │  反対意見を機械生成（major→minor 置換 / non-translation 否定文）
+   ├─ 反転しても同一文（major も non-translation も無い）→ 討論せず即確定
+   ▼
+round 0 : 種まきのみ。2 エージェントの履歴に「原案」「反転案」を assistant 発話として
+          植え付ける。LLM 呼び出し・judge 判定なし
+round 1〜3 : 各エージェントが相手の直前回答を提示されて再生成
+          → judge が 2 者のアノテーションの一貫性を yes/no 判定
+          ├─ "yes"（合意）→ その時点のアノテーションを確定して早期終了
+          └─ それ以外 → 次ラウンドへ（＝ラウンドが進むのは合意未成立の場合のみ）
+上限到達（実質 3 討論ラウンド消化）:
+          ├─ 最終 judge 回答に "no" → エージェント 1（原案系列）の最終回答を採用
+          └─ yes/no どちらとも取れない → 番兵 _NO_RESULT（当該次元は結果なし扱い）
+```
+
+要点:
+
+- **討論が始まる条件**: Stage1 のアノテーションに `major` か `non-translation` が含まれる
+  場合のみ。含まれなければ反転案が原案と同一になり、討論せずそのまま確定する。
+- **争点は重大度**: 反対意見は「severity を 1 段下げる」「non-translation を否定する」ものなので、
+  討論で検証されるのは主に「このエラーは本当に major / non-translation か」という判定
+  （用語の意味は [mqm-glossary.md](mqm-glossary.md)）。
+- **ラウンドが進む条件**: judge の回答に `"yes"` が含まれない（2 者の主張が食い違ったまま）場合。
+  `MAX_ROUNDS = 4` だが round 0 は種まきのみのため、LLM 生成を伴う討論は最大 3 ラウンド。
 
 ### メタ評価（`wmt23_metrics.ipynb`）
 `google-research/mt-metrics-eval` を用いて seg / sys レベル相関を算出する。詳細は
