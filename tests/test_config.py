@@ -7,7 +7,7 @@ class TestGetLlmConfig:
     def test_default_openai(self, clean_env):
         cfg = clean_env.get_llm_config()
         assert cfg["provider"] == "openai"
-        assert cfg["model"] == "gpt-4o-mini"
+        assert cfg["model"] == "gpt-4.1-mini"
         assert cfg["base_url"] is None
 
     def test_gemini(self, clean_env, monkeypatch):
@@ -79,5 +79,5 @@ class TestBuildOpenaiClient:
 
     def test_openai_with_fallback_key(self, clean_env):
         client, model = clean_env.build_openai_client(fallback_api_key="k")
-        assert model == "gpt-4o-mini"
+        assert model == "gpt-4.1-mini"
         assert "api.openai.com" in str(client.base_url)

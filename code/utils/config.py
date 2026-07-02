@@ -84,7 +84,7 @@ def get_llm_config():
 
     return {
         "provider": "openai",
-        "model": os.environ.get("LLM_MODEL", "gpt-4o-mini"),
+        "model": os.environ.get("LLM_MODEL", "gpt-4.1-mini"),
         "base_url": os.environ.get("LLM_BASE_URL"),  # None → OpenAI 既定エンドポイント
         "api_key": os.environ.get("LLM_API_KEY") or os.environ.get("OPENAI_API_KEY"),
     }

@@ -138,7 +138,7 @@ class Debate:
     """
 
     def __init__(self,
-            model_name: str='gpt-4o-mini',
+            model_name: str='gpt-4.1-mini',
             temperature: float=0,
             save_file_dir: str=None,
             openai_api_key: str=None,
@@ -150,7 +150,7 @@ class Debate:
         """Debate を初期化し、プロンプト読込・エージェント生成・独立アノテーションまで実行する。
 
         Args:
-            model_name (str, optional): モデル名。デフォルト 'gpt-4o-mini'。
+            model_name (str, optional): モデル名。デフォルト 'gpt-4.1-mini'。
             temperature (float, optional): サンプリング温度。デフォルト 0。
             save_file_dir (str, optional): 出力保存先ディレクトリ。
             openai_api_key (str, optional): API キー（フォールバック用）。

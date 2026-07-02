@@ -9,6 +9,7 @@ model2max_context = {
     "text-davinci-003": 4096,
     "text-davinci-002": 4096,
     "gpt-4o-mini":16384,
+    "gpt-4.1-mini": 1047576,
     "qwen2.5-72b-instruct": 131072,
     "Llama-3.1-70B-Instruct": 131072,
     "gemini-3.5-flash": 1000000,
