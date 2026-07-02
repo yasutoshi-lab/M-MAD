@@ -16,8 +16,25 @@
 | target segment | 訳文（`lp` のターゲット言語） |
 | annotated | `yes` / `no`。`no` はアノテーションをスキップし、Stage1 出力に `"None"` を書く |
 
-- `lp`: `zh-en` / `en-de` / `he-en`
-- `system`: MT システム名（例 `ANVITA`, `GPT4-5shot`, `refA`, `synthetic_ref`）
+- `lp`: `zh-en` / `en-de` / `he-en`、および `ja-{lang}`（`ja-zh-Hans` 等の複合ロケール可）
+- `system`: MT システム名（例 `ANVITA`, `GPT4-5shot`, `refA`, `synthetic_ref`。ja 診断ではマニュアル ID）
+
+### 手順書 JSON から生成する場合（`code/prepare_input.py`・Issue #50）
+
+- 評価対象セグメント: 手順書 `title` / `mainSteps[i].title` / `mainSteps[i].detailedSteps[j].description` / 同 `.notes`（空はスキップ）
+- **description 等の改行は単一スペースへ正規化して 1 セグメント**として扱う（ja と対象言語で
+  行数が異なるとアラインメントが壊れるため分割しない。論文の segment 定義も複数文を許容）
+- ja と対象言語は**構造パスで対応付け**。片側欠落は warning を出してスキップ
+- 付随して `data/input.ja-{lang}.{manual_id}_v2.map.tsv` を生成:
+
+```
+line_no <TAB> path <TAB> kind
+0       title                                    title
+1       mainSteps[0].title                       title
+2       mainSteps[0].detailedSteps[0].description description
+```
+
+`line_no`（0 始まり）は Stage1 出力 `{id}_v1.json` の id と一致し、メタ評価でのセグメント追跡に使う。
 
 ## Stage1 出力: `data/output_{lp}_{system}_{version}/{id}_v1.json`
 

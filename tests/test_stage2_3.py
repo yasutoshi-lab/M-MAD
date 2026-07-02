@@ -65,6 +65,12 @@ class TestGetLanguageNames:
         assert stage2_3.get_language_names('en-de') == ('English', 'German')
         assert stage2_3.get_language_names('he-en') == ('Hebrew', 'English')
 
+    def test_multipart_locale_target(self):
+        # ja-zh-Hans / ja-zh-Hant のような 3 要素ロケールでも解決できる（Issue #50）。
+        assert stage2_3.get_language_names('ja-zh-Hans') == ('Japanese', 'Chinese (Simplified)')
+        assert stage2_3.get_language_names('ja-zh-Hant') == ('Japanese', 'Chinese (Traditional)')
+        assert stage2_3.get_language_names('ja-my') == ('Japanese', 'Burmese')
+
 
 class TestMessageBuilders:
     """メッセージ構築系のテスト（S2-MSG）。"""

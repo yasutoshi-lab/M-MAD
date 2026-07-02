@@ -430,9 +430,10 @@ if __name__ == "__main__":
     current_script_path = os.path.abspath(__file__)
     MAD_path = current_script_path.rsplit("/", 2)[0]
 
-    src_lng, tgt_lng = args.lang_pair.split('-')
-    src_full = Language.make(language=src_lng).display_name()
-    tgt_full = Language.make(language=tgt_lng).display_name()
+    # maxsplit=1: "ja-zh-Hans" のような 3 要素ロケールでもソース/ターゲットに分解できる（Issue #50）
+    src_lng, tgt_lng = args.lang_pair.split('-', 1)
+    src_full = Language.get(src_lng).display_name()
+    tgt_full = Language.get(tgt_lng).display_name()
 
     config = json.load(open(f"{MAD_path}/code/utils/stage1.json", "r"))
 
