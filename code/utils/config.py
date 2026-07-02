@@ -1,14 +1,19 @@
 import os
 
 
-def _load_dotenv():
+def _load_dotenv(path: str = None):
     """リポジトリルートの .env を読み、未設定の環境変数のみ補完する。
 
     python-dotenv 等の依存を増やさない簡易実装。既に os.environ に存在するキーは上書きしない
-    （明示的な環境変数 / CLI での指定を優先する）。
+    （明示的な環境変数 / CLI での指定を優先する）。値が空の行（`KEY=`）は「未設定」とみなし
+    環境変数に設定しない（Issue #47）。
+
+    Args:
+        path (str, optional): 読み込む .env のパス。省略時はリポジトリルートの .env。
     """
-    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    path = os.path.join(root, ".env")
+    if path is None:
+        root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        path = os.path.join(root, ".env")
     if not os.path.exists(path):
         return
     with open(path, encoding="utf-8") as f:
@@ -17,7 +22,10 @@ def _load_dotenv():
             if not line or line.startswith("#") or "=" not in line:
                 continue
             key, _, value = line.partition("=")
-            os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+            value = value.strip().strip('"').strip("'")
+            if not value:
+                continue
+            os.environ.setdefault(key.strip(), value)
 
 
 def _vertex_base_url(project: str, location: str) -> str:
@@ -47,12 +55,13 @@ def get_llm_config():
               build_openai_client() が ADC から解決）を持つ設定辞書。
     """
     _load_dotenv()
-    provider = os.environ.get("LLM_PROVIDER", "openai").lower()
+    # 空文字の環境変数は「未設定」とみなし既定値へフォールバックする（Issue #47）。
+    provider = (os.environ.get("LLM_PROVIDER") or "openai").lower()
 
     if provider == "vertex":
         project = os.environ.get("GCP_PROJECT") or os.environ.get("GOOGLE_CLOUD_PROJECT")
-        location = os.environ.get("LLM_LOCATION", "global")
-        model = os.environ.get("LLM_MODEL", "gemini-3.5-flash")
+        location = os.environ.get("LLM_LOCATION") or "global"
+        model = os.environ.get("LLM_MODEL") or "gemini-3.5-flash"
         if not model.startswith("google/"):
             model = "google/" + model
         return {
@@ -67,25 +76,24 @@ def get_llm_config():
     if provider == "gemini":
         return {
             "provider": "gemini",
-            "model": os.environ.get("LLM_MODEL", "gemini-3.5-flash"),
-            "base_url": os.environ.get(
-                "LLM_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai/"
-            ),
+            "model": os.environ.get("LLM_MODEL") or "gemini-3.5-flash",
+            "base_url": os.environ.get("LLM_BASE_URL")
+            or "https://generativelanguage.googleapis.com/v1beta/openai/",
             "api_key": os.environ.get("LLM_API_KEY") or os.environ.get("GEMINI_API_KEY"),
         }
 
     if provider == "anthropic":
         return {
             "provider": "anthropic",
-            "model": os.environ.get("LLM_MODEL", "claude-haiku-4-5"),
-            "base_url": os.environ.get("LLM_BASE_URL", "https://api.anthropic.com/v1/"),
+            "model": os.environ.get("LLM_MODEL") or "claude-haiku-4-5",
+            "base_url": os.environ.get("LLM_BASE_URL") or "https://api.anthropic.com/v1/",
             "api_key": os.environ.get("LLM_API_KEY") or os.environ.get("ANTHROPIC_API_KEY"),
         }
 
     return {
         "provider": "openai",
-        "model": os.environ.get("LLM_MODEL", "gpt-4.1-mini"),
-        "base_url": os.environ.get("LLM_BASE_URL"),  # None → OpenAI 既定エンドポイント
+        "model": os.environ.get("LLM_MODEL") or "gpt-4.1-mini",
+        "base_url": os.environ.get("LLM_BASE_URL") or None,  # None → OpenAI 既定エンドポイント
         "api_key": os.environ.get("LLM_API_KEY") or os.environ.get("OPENAI_API_KEY"),
     }
 

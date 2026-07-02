@@ -1,5 +1,7 @@
 """utils/config.py の純粋関数（L1）ユニットテスト。"""
 
+import os
+
 
 class TestGetLlmConfig:
     """get_llm_config のテスト（CF-1..5）。clean_env で .env/環境変数から隔離する。"""
@@ -81,3 +83,46 @@ class TestBuildOpenaiClient:
         client, model = clean_env.build_openai_client(fallback_api_key="k")
         assert model == "gpt-4.1-mini"
         assert "api.openai.com" in str(client.base_url)
+
+
+class TestEmptyEnvFallback:
+    """空値の環境変数が既定値へフォールバックするテスト（CF-10..14・Issue #47）。"""
+
+    def test_empty_model_falls_back_to_default(self, clean_env, monkeypatch):
+        monkeypatch.setenv("LLM_MODEL", "")
+        assert clean_env.get_llm_config()["model"] == "gpt-4.1-mini"
+
+    def test_empty_provider_falls_back_to_openai(self, clean_env, monkeypatch):
+        monkeypatch.setenv("LLM_PROVIDER", "")
+        assert clean_env.get_llm_config()["provider"] == "openai"
+
+    def test_empty_base_url_openai_is_none(self, clean_env, monkeypatch):
+        monkeypatch.setenv("LLM_BASE_URL", "")
+        assert clean_env.get_llm_config()["base_url"] is None
+
+    def test_empty_base_url_gemini_falls_back(self, clean_env, monkeypatch):
+        monkeypatch.setenv("LLM_PROVIDER", "gemini")
+        monkeypatch.setenv("GEMINI_API_KEY", "k")
+        monkeypatch.setenv("LLM_BASE_URL", "")
+        assert "generativelanguage.googleapis.com" in clean_env.get_llm_config()["base_url"]
+
+    def test_empty_location_vertex_falls_back_to_global(self, clean_env, monkeypatch):
+        monkeypatch.setenv("LLM_PROVIDER", "vertex")
+        monkeypatch.setenv("GCP_PROJECT", "p")
+        monkeypatch.setenv("LLM_LOCATION", "")
+        assert "locations/global" in clean_env.get_llm_config()["base_url"]
+
+    def test_load_dotenv_skips_empty_values(self, monkeypatch, tmp_path):
+        import utils.config as config
+
+        env_file = tmp_path / ".env"
+        env_file.write_text("LLM_MODEL=\nMMAD_TEST_ONLY_VAR=bar\n", encoding="utf-8")
+        monkeypatch.delenv("LLM_MODEL", raising=False)
+        monkeypatch.delenv("MMAD_TEST_ONLY_VAR", raising=False)
+        try:
+            config._load_dotenv(path=str(env_file))
+            assert "LLM_MODEL" not in os.environ
+            assert os.environ.get("MMAD_TEST_ONLY_VAR") == "bar"
+        finally:
+            os.environ.pop("LLM_MODEL", None)
+            os.environ.pop("MMAD_TEST_ONLY_VAR", None)
