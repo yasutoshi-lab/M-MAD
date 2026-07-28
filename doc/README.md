@@ -14,6 +14,7 @@ M-MAD の設計・実行・設定・開発に関するドキュメント索引�
 | [configuration.md](configuration.md) | 設定リファレンス（env・プロバイダ既定・対応モデル・最大コンテキスト） |
 | [setup-vertex-adc.md](setup-vertex-adc.md) | Google Agent Platform（Vertex）+ ADC 方式のセットアップ |
 | [setup-ai-studio.md](setup-ai-studio.md) | Google AI Studio（Gemini API）+ 静的キー方式のセットアップ |
+| [setup-vllm.md](setup-vllm.md) | vLLM（ローカル/LAN 内の OpenAI 互換サーバ）への接続セットアップ |
 | [meta-evaluation.md](meta-evaluation.md) | メタ評価（`wmt23_metrics.ipynb` / mt-metrics-eval / seg・sys 相関）とプロバイダ間一致率レポート |
 | [prompts-and-fewshot.md](prompts-and-fewshot.md) | プロンプトの所在・置換、few-shot 構造、言語ペア追加手順 |
 | [contributing.md](contributing.md) | 開発ガイド（テスト/lint/pre-commit・PR フロー・論文整合性ルール） |
@@ -30,6 +31,7 @@ M-MAD は OpenAI 互換の Chat Completions API 経由で LLM を呼ぶ。プロ
 | Google AI Studio（Gemini API） | `gemini` | 静的 API キー | [setup-ai-studio.md](setup-ai-studio.md) |
 | OpenAI | `openai`（既定） | `OPENAI_API_KEY` | [configuration.md](configuration.md) |
 | Anthropic | `anthropic` | `ANTHROPIC_API_KEY` | [configuration.md](configuration.md) |
+| vLLM（ローカル/LAN 内の self-hosted） | `vllm` | 既定は不要（ダミーキー） | [setup-vllm.md](setup-vllm.md) |
 
 ### どちらの Google 方式を選ぶか
 - **`vertex`（推奨・Google Cloud 前提）**: GCP プロジェクト配下で Vertex を使う。認証は ADC で API キー不要。

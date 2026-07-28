@@ -63,6 +63,90 @@ class TestPreflight:
         assert not ok
         assert "foo" in msg
 
+    def test_vllm_requires_model_name(self):
+        # vllm はキー不要だが、配信モデル名に既定を置けないため VLLM_MODEL を必須とする（#67）。
+        ok, msg = run_jury.preflight("vllm", {})
+        assert not ok
+        assert "VLLM_MODEL" in msg
+        assert run_jury.preflight("vllm", {"VLLM_MODEL": "org/local-model"})[0]
+
+
+class TestResolveBaseUrl:
+    """resolve_base_url のテスト（RJ-URL・#67）。"""
+
+    def test_non_vllm_provider_returns_none(self):
+        assert run_jury.resolve_base_url("openai", {}) is None
+
+    def test_default_endpoint(self):
+        assert run_jury.resolve_base_url("vllm", {}) == "http://localhost:8000/v1"
+
+    def test_provider_specific_var(self):
+        env = {"VLLM_BASE_URL": "http://vllm-host:9000/v1"}
+        assert run_jury.resolve_base_url("vllm", env) == "http://vllm-host:9000/v1"
+
+    def test_blanked_generic_var_falls_back(self):
+        # build_provider_env が LLM_BASE_URL を空値化した後でも固有変数で解決できる（#47 + #67）。
+        env = run_jury.build_provider_env("vllm", {"VLLM_BASE_URL": "http://vllm-host:9000/v1"})
+        assert run_jury.resolve_base_url("vllm", env) == "http://vllm-host:9000/v1"
+
+
+class TestCheckEndpointReachable:
+    """check_endpoint_reachable のテスト（RJ-PING・#67）。urlopen を差し替えネットワーク非依存にする。"""
+
+    class _FakeResponse:
+        def __init__(self, status):
+            self.status = status
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc_info):
+            return False
+
+        def getcode(self):
+            return self.status
+
+    def test_reachable(self, monkeypatch):
+        called = {}
+
+        def fake_urlopen(url, timeout=None):
+            called["url"] = url
+            return self._FakeResponse(200)
+
+        monkeypatch.setattr(run_jury.urllib.request, "urlopen", fake_urlopen)
+        ok, msg = run_jury.check_endpoint_reachable("http://localhost:8000/v1")
+        assert ok
+        assert called["url"] == "http://localhost:8000/v1/models"
+        assert "OK" in msg
+
+    def test_trailing_slash_is_normalized(self, monkeypatch):
+        called = {}
+
+        def fake_urlopen(url, timeout=None):
+            called["url"] = url
+            return self._FakeResponse(200)
+
+        monkeypatch.setattr(run_jury.urllib.request, "urlopen", fake_urlopen)
+        run_jury.check_endpoint_reachable("http://localhost:8000/v1/")
+        assert called["url"] == "http://localhost:8000/v1/models"
+
+    def test_non_200_is_unreachable(self, monkeypatch):
+        monkeypatch.setattr(run_jury.urllib.request, "urlopen",
+                            lambda url, timeout=None: self._FakeResponse(503))
+        ok, msg = run_jury.check_endpoint_reachable("http://localhost:8000/v1")
+        assert not ok
+        assert "503" in msg
+
+    def test_connection_error_is_unreachable(self, monkeypatch):
+        # ポート転送断（接続拒否）を模す。例外を伝播させず (False, message) を返す。
+        def raise_urlerror(url, timeout=None):
+            raise run_jury.urllib.error.URLError("Connection refused")
+
+        monkeypatch.setattr(run_jury.urllib.request, "urlopen", raise_urlerror)
+        ok, msg = run_jury.check_endpoint_reachable("http://localhost:8000/v1")
+        assert not ok
+        assert "到達できない" in msg
+
 
 class TestCountStage1Results:
     """count_stage1_results のテスト（RJ-CNT）。"""

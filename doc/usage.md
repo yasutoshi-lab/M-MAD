@@ -8,7 +8,7 @@
 
 ```bash
 uv sync                 # ランタイム依存を導入（Python 3.10）
-cp .env.example .env    # LLM プロバイダを設定（例: vertex / gemini / openai）
+cp .env.example .env    # LLM プロバイダを設定（例: vertex / gemini / openai / vllm）
 ```
 
 `uv run <cmd>` で仮想環境内のコマンドを実行する。スクリプトはリポジトリ内のどのディレクトリからでも
@@ -80,15 +80,19 @@ sh run_stage2_3.sh
 ```bash
 uv run python code/run_jury.py -s <system> -lp <lp>                  # 既定: openai anthropic vertex
 uv run python code/run_jury.py -s <manual_id> -lp ja-vi -p openai vertex --ending 5
+uv run python code/run_jury.py -s <manual_id> -lp ja-en -p openai vertex vllm   # ローカル LLM を併走（#67）
 ```
 
 - 出力: `data/output_{lp}_{system}_{provider}/` / `data/stage2_3_{lp}_{system}_{provider}/`
-- **`.env` の前提**: プロバイダ固有のキー変数（`OPENAI_API_KEY` / `ANTHROPIC_API_KEY` /
-  `GEMINI_API_KEY`、vertex は `GCP_PROJECT`＋事前の `gcloud auth application-default login`）を
-  設定する。汎用 `LLM_MODEL` / `LLM_BASE_URL` / `LLM_API_KEY` はサブプロセス起動時に
-  空値で上書きされ各プロバイダ既定へ解決されるため、jury では使われない
+- **`.env` の前提**: プロバイダ固有の変数（`OPENAI_API_KEY` / `ANTHROPIC_API_KEY` /
+  `GEMINI_API_KEY`、vertex は `GCP_PROJECT`＋事前の `gcloud auth application-default login`、
+  vllm は `VLLM_MODEL`＋必要に応じて `VLLM_BASE_URL`）を設定する。汎用 `LLM_MODEL` /
+  `LLM_BASE_URL` / `LLM_API_KEY` はサブプロセス起動時に空値で上書きされ各プロバイダ既定へ
+  解決されるため、jury では使われない
 - 認証未設定のプロバイダは実行前チェック（preflight）でスキップし他は続行。Stage1 が全サンプル
   `success:false`（API 全滅・#52）のプロバイダは Stage2&3 をスキップして警告する
+- vllm は Stage1 起動前に `/v1/models` への到達性を 1 度確認し、未到達ならスキップする
+  （サーバ停止・ポートフォワード断のまま失敗リトライを空回りさせないため・#67）
 
 ## 4. メタ評価
 

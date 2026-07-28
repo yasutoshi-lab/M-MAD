@@ -44,15 +44,19 @@ def get_llm_config():
     """LLM プロバイダ設定を環境変数（および .env）から解決して返す。
 
     環境変数:
-        LLM_PROVIDER : "openai"（既定） | "gemini" | "vertex" | "anthropic"
+        LLM_PROVIDER : "openai"（既定） | "gemini" | "vertex" | "anthropic" | "vllm"
         LLM_MODEL    : モデル名（省略時はプロバイダ既定。vertex は google/ プレフィックスを自動付与）
         LLM_BASE_URL : OpenAI 互換エンドポイント（省略時はプロバイダ既定）
         LLM_API_KEY  : API キー（省略時は OPENAI_API_KEY / GEMINI_API_KEY を参照）
         GCP_PROJECT / LLM_LOCATION : vertex 利用時のプロジェクトとリージョン（既定 location=global）
+        VLLM_MODEL / VLLM_BASE_URL / VLLM_API_KEY : vllm 利用時のプロバイダ固有設定（Issue #67）
 
     Returns:
         dict: provider / model / base_url / api_key（vertex は None、トークンは
               build_openai_client() が ADC から解決）を持つ設定辞書。
+
+    Raises:
+        ValueError: provider が vllm でモデル名が未設定の場合。
     """
     _load_dotenv()
     # 空文字の環境変数は「未設定」とみなし既定値へフォールバックする（Issue #47）。
@@ -88,6 +92,31 @@ def get_llm_config():
             "model": os.environ.get("LLM_MODEL") or "claude-haiku-4-5",
             "base_url": os.environ.get("LLM_BASE_URL") or "https://api.anthropic.com/v1/",
             "api_key": os.environ.get("LLM_API_KEY") or os.environ.get("ANTHROPIC_API_KEY"),
+        }
+
+    if provider == "vllm":
+        # ローカル/LAN 内の vLLM（OpenAI 互換サーバ）。サーバ本体は別リポジトリで運用し、
+        # ここでは API 操作のみを行う（Issue #67）。
+        # プロバイダ固有変数（VLLM_*）を用意するのは、run_jury.build_provider_env() が
+        # 汎用の LLM_MODEL / LLM_BASE_URL / LLM_API_KEY を空値で上書きするため
+        # （#47 の空値フォールバック利用）。jury 実行時は固有変数側で接続情報を保持する。
+        model = os.environ.get("LLM_MODEL") or os.environ.get("VLLM_MODEL")
+        if not model:
+            # 配信モデル名はサーバ側で決まる任意の文字列（HF リポ名等）で既定を置けないため、
+            # 空モデル名でリクエストを投げる前に fail-fast させる。
+            raise ValueError(
+                "LLM_PROVIDER=vllm ではモデル名が必須。VLLM_MODEL（または LLM_MODEL）に "
+                "vLLM サーバが配信するモデル名を設定する（例: /v1/models の id）"
+            )
+        return {
+            "provider": "vllm",
+            "model": model,
+            "base_url": os.environ.get("LLM_BASE_URL")
+            or os.environ.get("VLLM_BASE_URL")
+            or "http://localhost:8000/v1",
+            # vLLM は既定でキー不要だが、OpenAI クライアントは非空キーを要求するためダミーを渡す。
+            # 認証付きで起動している場合は VLLM_API_KEY / LLM_API_KEY で上書きできる。
+            "api_key": os.environ.get("LLM_API_KEY") or os.environ.get("VLLM_API_KEY") or "EMPTY",
         }
 
     return {

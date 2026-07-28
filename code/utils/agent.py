@@ -1,9 +1,15 @@
 import backoff
 from openai import RateLimitError, APIConnectionError, InternalServerError, APITimeoutError
 from .openai_utils import OutOfQuotaException, AccessTerminatedException
-from .config import build_openai_client
+from .config import build_openai_client, get_llm_config
 
 support_models = ['gpt-3.5-turbo', 'gpt-3.5-turbo-0301', 'gpt-4o-mini', 'gpt-4.1-mini', 'qwen2.5-72b-instruct', 'Llama-3.1-70B-Instruct', 'gemini-3.5-flash', 'google/gemini-3.5-flash', 'claude-haiku-4-5']
+
+# support_models の allowlist を適用しないプロバイダ（Issue #67）。
+# self-hosted（vLLM）では配信モデル名がサーバ側で決まる任意の文字列（例
+# "nvidia/Gemma-4-26B-A4B-NVFP4" のような HF リポ名）になり、リポジトリ側で列挙できない。
+# ホスト型プロバイダではモデル名タイポ検出のガード（Issue #12）を維持する。
+ALLOWLIST_EXEMPT_PROVIDERS = {'vllm'}
 
 class Agent:
     """LLM とのチャット履歴を保持し、問い合わせを行う基底エージェント。
@@ -57,7 +63,9 @@ class Agent:
         # time.sleep(self.sleep_time)
         # プロバイダ設定（OpenAI / Gemini）から client と使用モデルを解決する。
         client, model = build_openai_client(fallback_api_key=api_key)
-        assert model in support_models, f"Not support {model}. Choices: {support_models}"
+        # self-hosted プロバイダ（vLLM）は任意のモデル名を配信しうるため allowlist を免除する（Issue #67）。
+        if get_llm_config()["provider"] not in ALLOWLIST_EXEMPT_PROVIDERS:
+            assert model in support_models, f"Not support {model}. Choices: {support_models}"
         try:
             response = client.chat.completions.create(
                 model=model,

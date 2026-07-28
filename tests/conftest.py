@@ -31,6 +31,7 @@ def clean_env(monkeypatch):
         "LLM_PROVIDER", "LLM_MODEL", "LLM_BASE_URL", "LLM_API_KEY",
         "OPENAI_API_KEY", "OPENAI_BASE_URL", "GEMINI_API_KEY", "ANTHROPIC_API_KEY",
         "GCP_PROJECT", "GOOGLE_CLOUD_PROJECT", "LLM_LOCATION",
+        "VLLM_MODEL", "VLLM_BASE_URL", "VLLM_API_KEY",
     ]:
         monkeypatch.delenv(var, raising=False)
     return config

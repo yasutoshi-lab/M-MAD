@@ -99,8 +99,28 @@ L2（LLM モック）のうち API 失敗系（4.4 の L2-ED/JG/RN・#52）と�
 | CF-12 | `get_llm_config` | `LLM_BASE_URL=''`（openai / gemini） | openai: base_url=None / gemini: 既定 URL |
 | CF-13 | `get_llm_config` | `LLM_PROVIDER=vertex`,`GCP_PROJECT=p`,`LLM_LOCATION=''` | base_url に `locations/global` |
 | CF-14 | `_load_dotenv` | tmp .env に `LLM_MODEL=`（空値行）と `KEY=bar` | 空値行は os.environ に設定されず、値あり行のみ setdefault |
+| CF-15 | `get_llm_config` | `LLM_PROVIDER=vllm`,`VLLM_MODEL=org/m` | provider=vllm / model=org/m / base_url=`http://localhost:8000/v1` / api_key=`EMPTY`（#67） |
+| CF-16 | `get_llm_config` | vllm で `LLM_*` と `VLLM_*` の両方 | 汎用 `LLM_*` が優先される |
+| CF-17 | `get_llm_config` | vllm で `VLLM_BASE_URL` / `VLLM_API_KEY` のみ | 固有変数の値が使われる |
+| CF-18 | `get_llm_config` | vllm で `LLM_*` が空値（jury 実行時の状態） | `VLLM_*` へフォールバック（#47 + #67） |
+| CF-19 | `get_llm_config` | `LLM_PROVIDER=vllm`（モデル名なし） | `ValueError`（既定を置けないため fail-fast） |
 
-### 3.4 `code/utils/openai_utils.py`
+### 3.4 `code/run_jury.py`（vllm 対応で追加・#67）
+
+> `run_jury.py` の既存ケース（`jury_output_dirs` / `build_provider_env` / `preflight` /
+> `count_stage1_results`）は `tests/test_run_jury.py` に実装済み。ここでは vllm 対応の追加分を示す。
+
+| ID | 対象 | 入力 | 期待 |
+|---|---|---|---|
+| RJ-PF-VLLM | `preflight` | `('vllm', {})` / `{'VLLM_MODEL':'org/m'}` | 前者は不可（メッセージに `VLLM_MODEL`）／後者は可 |
+| RJ-URL-1 | `resolve_base_url` | `('openai', {})` | `None`（到達性チェック対象外） |
+| RJ-URL-2 | `resolve_base_url` | `('vllm', {})` | `http://localhost:8000/v1`（既定） |
+| RJ-URL-3 | `resolve_base_url` | `build_provider_env('vllm', {'VLLM_BASE_URL':...})` | 汎用変数が空値化されても固有変数で解決 |
+| RJ-PING-1 | `check_endpoint_reachable` | `urlopen` が 200（モック） | `(True, ...)`。URL は `<base_url>/models`（末尾スラッシュ正規化） |
+| RJ-PING-2 | `check_endpoint_reachable` | `urlopen` が 503（モック） | `(False, ...)`。メッセージにステータス |
+| RJ-PING-3 | `check_endpoint_reachable` | `urlopen` が `URLError`（モック） | 例外を伝播せず `(False, ...)`（ポート転送断の想定） |
+
+### 3.5 `code/utils/openai_utils.py`
 
 | ID | 対象 | 入力 | 期待 |
 |---|---|---|---|
@@ -149,6 +169,16 @@ L2（LLM モック）のうち API 失敗系（4.4 の L2-ED/JG/RN・#52）と�
 | L2-JG-1 | Judge が不正 JSON を返し続ける | ask が非 JSON | 10 回後に non-translation フォールバック（#5/#7）。**`api_failures` には記録しない**（応答ありのパース失敗・#52） |
 | L2-JG-2 | Judge の ask が毎回例外（API 全滅） | ask が raise | non-translation フォールバック＋`api_failures` に記録（#52） |
 | L2-RN-1 | `run()` | api_failures 空 / 1 件以上 | success=true / **success=false**＋api_failures を save_file に格納（#52） |
+
+### 4.5 `utils.agent.Agent.query` のモデル allowlist（#67）
+
+`build_openai_client` / `get_llm_config` をフェイクへ差し替え、.env・ネットワークに依存させずに検証する。
+
+| ID | 入力 | 期待 |
+|---|---|---|
+| L2-AL-1 | provider=vllm、`support_models` 外のモデル名 | allowlist を免除し API 呼び出しが行われる |
+| L2-AL-2 | provider=openai、`support_models` 外のモデル名 | `AssertionError`。API は呼ばれない（呼び出し回数 0） |
+| L2-AL-3 | provider=anthropic、`support_models` 内のモデル名 | 従来どおり正常応答 |
 
 > L2-ED-1/2・L2-JG-1/2・L2-RN-1 は Issue #52 の対応で `tests/test_stage1_debate.py` に**実装済み**
 > （`Debate.__new__` でフェイク agent を注入する方式）。
