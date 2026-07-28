@@ -16,6 +16,7 @@ M-MAD の設計・実行・設定・開発に関するドキュメント索引�
 | [setup-ai-studio.md](setup-ai-studio.md) | Google AI Studio（Gemini API）+ 静的キー方式のセットアップ |
 | [setup-vllm.md](setup-vllm.md) | vLLM（ローカル/LAN 内の OpenAI 互換サーバ）への接続セットアップ |
 | [meta-evaluation.md](meta-evaluation.md) | メタ評価（`wmt23_metrics.ipynb` / mt-metrics-eval / seg・sys 相関）とプロバイダ間一致率レポート |
+| [jury-batch-operations.md](jury-batch-operations.md) | run-level jury の長時間バッチ運用ノート（事前確認・デタッチ実行・中断復旧・既知の失敗モード） |
 | [prompts-and-fewshot.md](prompts-and-fewshot.md) | プロンプトの所在・置換、few-shot 構造、言語ペア追加手順 |
 | [contributing.md](contributing.md) | 開発ガイド（テスト/lint/pre-commit・PR フロー・論文整合性ルール） |
 | [test-design.md](test-design.md) | テスト設計書（方針・L1/L2 ケース一覧） |
