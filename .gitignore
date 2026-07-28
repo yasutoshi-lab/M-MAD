@@ -4,6 +4,7 @@
 .venv/*
 .env
 .vscode/
+.input/
 
 ## Python
 __pycache__/
