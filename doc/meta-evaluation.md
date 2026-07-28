@@ -87,6 +87,7 @@ run-level jury（#55）で生成したプロバイダ別出力を突合し、**�
 
 ```bash
 uv run python code/jury_report.py -s <system> -lp <lp> -p openai anthropic vertex
+uv run python code/jury_report.py -s <system> -lp <lp> -p openai vertex vllm  # ローカル LLM を含める（#67）
 # → data/jury_report.{lp}.{system}.md / .csv（gitignore 済み）
 ```
 

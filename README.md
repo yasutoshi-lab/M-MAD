@@ -49,7 +49,7 @@ uv run pre-commit install   # (optional) enable local pre-commit ruff hook
 
 Tests and lint also run automatically in CI (GitHub Actions) on push / PR to `main`.
 
-#### LLM provider (OpenAI / Gemini / Vertex / Anthropic)
+#### LLM provider (OpenAI / Gemini / Vertex / Anthropic / vLLM)
 
 The LLM backend is selected via environment variables (loaded automatically from a `.env` file at the repo root; see `.env.example` and [doc/configuration.md](doc/configuration.md)).
 
@@ -76,6 +76,14 @@ cp .env.example .env
   Uses `base_url=https://generativelanguage.googleapis.com/v1beta/openai/`.
 - **OpenAI** (default): set `LLM_PROVIDER=openai` and `OPENAI_API_KEY` (default model: `gpt-4.1-mini`).
 - **Anthropic**: set `LLM_PROVIDER=anthropic` and `ANTHROPIC_API_KEY` (default model: `claude-haiku-4-5`, via the OpenAI-compatible endpoint `https://api.anthropic.com/v1/`).
+- **vLLM (self-hosted, OpenAI-compatible)**:
+  ```
+  LLM_PROVIDER=vllm
+  VLLM_MODEL=<model id served by your vLLM server>   # required (no default)
+  VLLM_BASE_URL=http://localhost:8000/v1             # default
+  ```
+  Only the API-client side lives in this repo; running the vLLM server itself (GPU, weights) is out of scope
+  and handled in a separate repository. See [doc/setup-vllm.md](doc/setup-vllm.md).
 
 ### 2) Stage 1 (Dimension Partition)
 
@@ -103,7 +111,7 @@ This fork adds tooling for diagnosing Japanese-to-multilingual MT quality with M
 
 - **Input preprocessing** (`code/prepare_input.py`): converts instruction-manual JSON (`.input/<manual_id>/`) into Stage1 tab-separated inputs plus a segment map. See [doc/usage.md](doc/usage.md).
 - **Shared ja→en 4-shot demos** (`code/few_shot_demos_ja.py`): applied to all `ja-*` language pairs via source-language resolution. See [doc/prompts-and-fewshot.md](doc/prompts-and-fewshot.md).
-- **Run-level jury** (`code/run_jury.py`): runs the whole pipeline independently per provider (OpenAI / Anthropic / Vertex) with separated output directories — each run stays single-provider (paper-compliant).
+- **Run-level jury** (`code/run_jury.py`): runs the whole pipeline independently per provider (OpenAI / Anthropic / Vertex / self-hosted vLLM) with separated output directories — each run stays single-provider (paper-compliant).
 - **Agreement report** (`code/jury_report.py`): read-only post-processing that juxtaposes per-provider scores and descriptive agreement statistics (Spearman ρ, Cohen's κ). No combined score is produced.
 
 Reliability: total API failures are surfaced as `success: false` + `api_failures` in Stage1 outputs, permanent 4xx errors fail fast (no retry), and outputs record the actually used `model_name` / `provider`.

@@ -1,8 +1,8 @@
 # 設定リファレンス
 
 LLM プロバイダ・モデル・接続先の設定を横断的にまとめる。プロバイダ別の詳細手順は
-[setup-vertex-adc.md](setup-vertex-adc.md) / [setup-ai-studio.md](setup-ai-studio.md)、選択指針は
-[README.md](README.md) を参照。
+[setup-vertex-adc.md](setup-vertex-adc.md) / [setup-ai-studio.md](setup-ai-studio.md) /
+[setup-vllm.md](setup-vllm.md)、選択指針は [README.md](README.md) を参照。
 
 設定は `code/utils/config.py`（`get_llm_config()` / `build_openai_client()`）が、環境変数および
 リポジトリルートの `.env`（自動読込・`setdefault` なので明示指定が優先）から解決する。
@@ -11,7 +11,7 @@ LLM プロバイダ・モデル・接続先の設定を横断的にまとめる�
 
 | 変数 | 用途 | 既定 |
 |---|---|---|
-| `LLM_PROVIDER` | `openai` / `gemini` / `vertex` / `anthropic` | `openai` |
+| `LLM_PROVIDER` | `openai` / `gemini` / `vertex` / `anthropic` / `vllm` | `openai` |
 | `LLM_MODEL` | モデル名（provider 既定を上書き。vertex は `google/` を自動付与） | provider 依存 |
 | `LLM_BASE_URL` | OpenAI 互換エンドポイントの上書き（通常不要） | provider 依存 |
 | `LLM_API_KEY` | プロバイダ非依存の API キー上書き | なし |
@@ -20,6 +20,9 @@ LLM プロバイダ・モデル・接続先の設定を横断的にまとめる�
 | `ANTHROPIC_API_KEY` | Anthropic 利用時の API キー | なし |
 | `GCP_PROJECT` / `GOOGLE_CLOUD_PROJECT` | Vertex 利用時の GCP プロジェクト | なし |
 | `LLM_LOCATION` | Vertex のリージョン（`global` など） | `global` |
+| `VLLM_MODEL` | vLLM が配信するモデル名（**必須**。`/v1/models` の `id`） | なし（未設定は `ValueError`） |
+| `VLLM_BASE_URL` | vLLM の OpenAI 互換エンドポイント | `http://localhost:8000/v1` |
+| `VLLM_API_KEY` | vLLM を認証付きで起動している場合のキー | `EMPTY`（ダミー） |
 
 > **空値は未設定扱い**: 値を空にした変数（`.env` の `LLM_MODEL=` や環境変数の空文字）は
 > 未設定と同じ扱いになり、既定値へフォールバックする（Issue #47）。
@@ -27,7 +30,7 @@ LLM プロバイダ・モデル・接続先の設定を横断的にまとめる�
 > **run-level jury（複数プロバイダ実行・#55）の前提**: `run_jury.py` は各プロバイダ実行時に
 > 汎用の `LLM_MODEL` / `LLM_BASE_URL` / `LLM_API_KEY` を空値で上書きするため、
 > **プロバイダ固有のキー変数**（`OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GEMINI_API_KEY`、
-> vertex は `GCP_PROJECT`＋ADC）を設定すること。
+> vertex は `GCP_PROJECT`＋ADC、vllm は `VLLM_MODEL`＋必要に応じて `VLLM_BASE_URL`）を設定すること。
 
 ## プロバイダ別の既定
 
@@ -37,12 +40,18 @@ LLM プロバイダ・モデル・接続先の設定を横断的にまとめる�
 | `gemini` | `gemini-3.5-flash` | `https://generativelanguage.googleapis.com/v1beta/openai/` | `GEMINI_API_KEY`（静的キー） |
 | `vertex` | `google/gemini-3.5-flash` | `https://{location}-aiplatform.googleapis.com/v1/projects/{GCP_PROJECT}/locations/{location}/endpoints/openapi`（`global` は host が `aiplatform.googleapis.com`） | ADC の OAuth トークン（`gcloud auth application-default login`） |
 | `anthropic` | `claude-haiku-4-5` | `https://api.anthropic.com/v1/`（OpenAI 互換エンドポイント） | `ANTHROPIC_API_KEY`（または `LLM_API_KEY`） |
+| `vllm` | **既定なし**（`VLLM_MODEL` 必須） | `http://localhost:8000/v1`（`VLLM_BASE_URL` で上書き） | 既定は不要（ダミーキー `EMPTY`。認証付き起動時は `VLLM_API_KEY`） |
 
 ## 対応モデルと最大コンテキスト
 
 `code/utils/agent.py:support_models`:
 `gpt-3.5-turbo` / `gpt-3.5-turbo-0301` / `gpt-4o-mini` / `gpt-4.1-mini` / `qwen2.5-72b-instruct` /
 `Llama-3.1-70B-Instruct` / `gemini-3.5-flash` / `google/gemini-3.5-flash` / `claude-haiku-4-5`
+
+> **vllm は allowlist の対象外（Issue #67）**: self-hosted は配信モデル名がサーバ側で決まる任意の
+> 文字列（例 `nvidia/Gemma-4-26B-A4B-NVFP4`）になるため、`LLM_PROVIDER=vllm` のときは
+> `support_models` の検証をスキップする（`code/utils/agent.py:ALLOWLIST_EXEMPT_PROVIDERS`）。
+> ホスト型プロバイダではモデル名タイポ検出のガードを維持する。
 
 `code/utils/openai_utils.py:model2max_context`（トークン計算のフォールバックあり。未知モデルは
 `num_tokens_from_string` が `cl100k_base` に近似）:
@@ -78,6 +87,12 @@ LLM_LOCATION=global
 # LLM_PROVIDER=anthropic
 # LLM_MODEL=claude-haiku-4-5
 # ANTHROPIC_API_KEY=sk-ant-...
+
+# vLLM（ローカル/LAN 内の OpenAI 互換サーバ。サーバ本体の構築は別リポジトリの責務）
+# LLM_PROVIDER=vllm
+# VLLM_MODEL=nvidia/Gemma-4-26B-A4B-NVFP4
+# VLLM_BASE_URL=http://localhost:8000/v1
+# VLLM_API_KEY=EMPTY
 ```
 
 雛形は [`.env.example`](../.env.example)。`.env` は `.gitignore` 済みでコミットされない。

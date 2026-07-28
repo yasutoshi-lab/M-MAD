@@ -2,6 +2,8 @@
 
 import os
 
+import pytest
+
 
 class TestGetLlmConfig:
     """get_llm_config のテスト（CF-1..5）。clean_env で .env/環境変数から隔離する。"""
@@ -54,6 +56,62 @@ class TestGetLlmConfig:
     def test_model_override_openai(self, clean_env, monkeypatch):
         monkeypatch.setenv("LLM_MODEL", "foo")
         assert clean_env.get_llm_config()["model"] == "foo"
+
+
+class TestVllmConfig:
+    """vllm プロバイダのテスト（CF-15..19・Issue #67）。"""
+
+    def test_defaults_from_provider_specific_vars(self, clean_env, monkeypatch):
+        # jury 実行時は汎用 LLM_* が空値化されるため、VLLM_* だけで解決できる必要がある。
+        monkeypatch.setenv("LLM_PROVIDER", "vllm")
+        monkeypatch.setenv("VLLM_MODEL", "org/local-model")
+        cfg = clean_env.get_llm_config()
+        assert cfg["provider"] == "vllm"
+        assert cfg["model"] == "org/local-model"
+        assert cfg["base_url"] == "http://localhost:8000/v1"
+        # OpenAI クライアントが非空キーを要求するためダミーを返す
+        assert cfg["api_key"] == "EMPTY"
+
+    def test_generic_vars_take_precedence(self, clean_env, monkeypatch):
+        monkeypatch.setenv("LLM_PROVIDER", "vllm")
+        monkeypatch.setenv("VLLM_MODEL", "org/from-vllm-var")
+        monkeypatch.setenv("VLLM_BASE_URL", "http://vllm-host:9000/v1")
+        monkeypatch.setenv("VLLM_API_KEY", "from-vllm-var")
+        monkeypatch.setenv("LLM_MODEL", "org/from-generic")
+        monkeypatch.setenv("LLM_BASE_URL", "http://generic:1234/v1")
+        monkeypatch.setenv("LLM_API_KEY", "from-generic")
+        cfg = clean_env.get_llm_config()
+        assert cfg["model"] == "org/from-generic"
+        assert cfg["base_url"] == "http://generic:1234/v1"
+        assert cfg["api_key"] == "from-generic"
+
+    def test_provider_specific_base_url_and_key(self, clean_env, monkeypatch):
+        monkeypatch.setenv("LLM_PROVIDER", "vllm")
+        monkeypatch.setenv("VLLM_MODEL", "org/local-model")
+        monkeypatch.setenv("VLLM_BASE_URL", "http://vllm-host:9000/v1")
+        monkeypatch.setenv("VLLM_API_KEY", "secret")
+        cfg = clean_env.get_llm_config()
+        assert cfg["base_url"] == "http://vllm-host:9000/v1"
+        assert cfg["api_key"] == "secret"
+
+    def test_empty_generic_vars_fall_back_to_provider_specific(self, clean_env, monkeypatch):
+        # run_jury.build_provider_env() が汎用変数を空値で上書きするケース（#47 + #67）。
+        monkeypatch.setenv("LLM_PROVIDER", "vllm")
+        monkeypatch.setenv("VLLM_MODEL", "org/local-model")
+        monkeypatch.setenv("VLLM_BASE_URL", "http://vllm-host:9000/v1")
+        monkeypatch.setenv("LLM_MODEL", "")
+        monkeypatch.setenv("LLM_BASE_URL", "")
+        monkeypatch.setenv("LLM_API_KEY", "")
+        cfg = clean_env.get_llm_config()
+        assert cfg["model"] == "org/local-model"
+        assert cfg["base_url"] == "http://vllm-host:9000/v1"
+        assert cfg["api_key"] == "EMPTY"
+
+    def test_missing_model_raises(self, clean_env, monkeypatch):
+        # ローカルは任意モデル名で既定を置けないため fail-fast する。
+        monkeypatch.setenv("LLM_PROVIDER", "vllm")
+        with pytest.raises(ValueError, match="VLLM_MODEL"):
+            clean_env.get_llm_config()
 
 
 class TestVertexBaseUrl:

@@ -11,13 +11,14 @@
 
 .env の前提（jury 実行時）:
     プロバイダ固有のキー変数（OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY、
-    vertex は GCP_PROJECT + ADC）を設定すること。汎用 LLM_MODEL / LLM_BASE_URL /
-    LLM_API_KEY はサブプロセス起動時に空値で上書きされ、各プロバイダの既定へ解決される
-    （Issue #47 の空値フォールバック仕様を利用）。
+    vertex は GCP_PROJECT + ADC、vllm は VLLM_MODEL[+ VLLM_BASE_URL]）を設定すること。
+    汎用 LLM_MODEL / LLM_BASE_URL / LLM_API_KEY はサブプロセス起動時に空値で上書きされ、
+    各プロバイダの既定へ解決される（Issue #47 の空値フォールバック仕様を利用）。
 
 実行例:
     uv run python code/run_jury.py -s <manual_id> -lp ja-en
     uv run python code/run_jury.py -s <manual_id> -lp ja-vi -p openai vertex --ending 5
+    uv run python code/run_jury.py -s <manual_id> -lp ja-en -p openai vertex vllm
 """
 
 import argparse
@@ -26,16 +27,23 @@ import json
 import os
 import subprocess
 import sys
+import urllib.error
+import urllib.request
 
 MAD_PATH = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# プロバイダごとの認証前提（いずれか 1 つが非空なら実行可能とみなす）
+# プロバイダごとの実行前提となる環境変数（いずれか 1 つが非空なら実行可能とみなす）。
+# vllm はキー不要だが、配信モデル名に既定を置けないため VLLM_MODEL を必須とする（Issue #67）。
 PROVIDER_AUTH_VARS = {
     "openai": ("OPENAI_API_KEY",),
     "anthropic": ("ANTHROPIC_API_KEY",),
     "gemini": ("GEMINI_API_KEY",),
     "vertex": ("GCP_PROJECT", "GOOGLE_CLOUD_PROJECT"),
+    "vllm": ("VLLM_MODEL",),
 }
+
+# 到達性チェックを行うプロバイダ（self-hosted はサーバ停止・ポート転送断が起こりうる）
+REACHABILITY_CHECK_PROVIDERS = {"vllm"}
 
 
 def jury_output_dirs(lang_pair, system, provider):
@@ -95,6 +103,50 @@ def preflight(provider, environ):
     return False, f"{provider}: {' / '.join(auth_vars)} が未設定のためスキップ"
 
 
+def resolve_base_url(provider, env):
+    """プロバイダの OpenAI 互換エンドポイントをサブプロセスと同じ規則で解決する。
+
+    utils.config.get_llm_config() の解決順（汎用 LLM_BASE_URL → プロバイダ固有 →
+    既定）を、サブプロセスへ渡す env に対して再現する。到達性チェック専用。
+
+    Args:
+        provider (str): プロバイダ名。
+        env (Mapping): サブプロセスへ渡す環境変数（build_provider_env の結果）。
+
+    Returns:
+        str | None: base_url。到達性チェック対象外のプロバイダなら None。
+    """
+    if provider != "vllm":
+        return None
+    return env.get("LLM_BASE_URL") or env.get("VLLM_BASE_URL") or "http://localhost:8000/v1"
+
+
+def check_endpoint_reachable(base_url, timeout=5):
+    """OpenAI 互換エンドポイントの `/models` に到達できるかを確認する（Issue #67）。
+
+    self-hosted（vLLM）はサーバ停止やポート転送断で疎通が落ちうる。その状態で Stage1 を
+    起動すると、全エージェント × 全セグメントぶんの失敗リトライを空回りさせるため、
+    実行前に 1 度だけ疎通を確認して fail-fast する。
+
+    Args:
+        base_url (str): OpenAI 互換エンドポイント（例 http://localhost:8000/v1）。
+        timeout (float, optional): タイムアウト秒。既定 5。
+
+    Returns:
+        tuple[bool, str]: (到達可能か, メッセージ)。
+    """
+    url = base_url.rstrip("/") + "/models"
+    try:
+        # 参照先は .env で指定した自前の推論エンドポイント（http/https 固定）。
+        with urllib.request.urlopen(url, timeout=timeout) as resp:
+            status = getattr(resp, "status", None) or resp.getcode()
+        if status == 200:
+            return True, f"{url} 到達 OK"
+        return False, f"{url} が HTTP {status} を返した"
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        return False, f"{url} へ到達できない: {e}"
+
+
 def count_stage1_results(stage1_dir):
     """Stage1 出力の (対象サンプル数, success:false 件数) を数える（Issue #52 の検知）。
 
@@ -143,6 +195,14 @@ def run_provider(provider, system, lang_pair, input_file, starting, ending, base
     code_dir = os.path.join(MAD_PATH, "code")
 
     print(f"\n===== provider: {provider} =====")
+    if provider in REACHABILITY_CHECK_PROVIDERS:
+        # self-hosted サーバは疎通が落ちうるため、Stage1 起動前に 1 度だけ確認する（Issue #67）。
+        reachable, message = check_endpoint_reachable(resolve_base_url(provider, env))
+        print(f"[{provider}] {message}")
+        if not reachable:
+            print(f"[warn] {provider}: エンドポイント未到達のためスキップ（サーバ起動・ポート転送を確認）")
+            return False
+
     subprocess.run(
         [sys.executable, os.path.join(code_dir, "stage1.py"),
          "-i", input_file, "-o", stage1_dir, "-lp", lang_pair],
@@ -174,7 +234,8 @@ def parse_args():
     parser.add_argument("-s", "--system", type=str, required=True, help="MT システム名（ja 診断ではマニュアル ID）")
     parser.add_argument("-lp", "--lang-pair", type=str, required=True, help="言語ペア（例 ja-en）")
     parser.add_argument("-p", "--providers", type=str, nargs="+",
-                        default=["openai", "anthropic", "vertex"], help="実行するプロバイダ")
+                        default=["openai", "anthropic", "vertex"],
+                        help="実行するプロバイダ（openai / anthropic / gemini / vertex / vllm）")
     parser.add_argument("--starting", type=int, default=0, help="Stage2&3 の開始サンプル index")
     parser.add_argument("--ending", type=int, default=2000, help="Stage2&3 の終了サンプル index（2000 = 全件）")
     return parser.parse_args()
